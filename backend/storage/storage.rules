@@ -1,0 +1,11 @@
+rules_version = '2';
+
+// STARTER TEMPLATE — restrict to authenticated users.
+// Tighten paths/ownership for production (e.g. per-user or per-house folders).
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
