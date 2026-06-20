@@ -3,7 +3,7 @@ workflows:
     name: iOS Release
     max_build_duration: 60
     instance_type: mac_mini_m2
-    working_directory: leasely  
+    working_directory: homies  
 
     integrations:
       app_store_connect: Leasely
