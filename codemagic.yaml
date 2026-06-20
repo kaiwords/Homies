@@ -5,16 +5,11 @@ workflows:
     instance_type: mac_mini_m2
 
     integrations:
-      # 👇 REPLACE with the exact NAME you gave your key in Codemagic
       app_store_connect: Leasely
 
     environment:
-      ios_signing:
-        distribution_type: app_store
-        # 👇 REPLACE with your Leasely bundle ID
-        bundle_identifier: com.kai.poems
       vars:
-        # 👇 REPLACE with the numeric Apple ID from App Information
+        BUNDLE_ID: "com.kai.poems"
         APP_STORE_APPLE_ID: 6781926631
       flutter: stable
       xcode: latest
@@ -28,12 +23,19 @@ workflows:
         script: |
           find . -name "Podfile" -execdir pod install \;
 
-      - name: Set up code signing
-        script: xcode-project use-profiles
-
-      - name: Auto-increment build number
+      - name: Set up code signing (creates certificate + profile if missing)
         script: |
-          LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID")
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
+
+      - name: Set build number (handles first-ever build)
+        script: |
+          LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo "0")
+          if [ -z "$LATEST" ]; then LATEST=0; fi
           echo "BUILD_NUMBER=$((LATEST + 1))" >> "$CM_ENV"
 
       - name: Build signed IPA
