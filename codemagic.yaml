@@ -28,15 +28,19 @@ workflows:
  
       - name: Set up code signing (creates certificate + profile)
         script: |
+          set -e
           keychain initialize
-          echo "$CERTIFICATE_PRIVATE_KEY" > /tmp/cert_key
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --platform IOS \
             --type IOS_APP_STORE \
-            --certificate-key=@file:/tmp/cert_key \
+            --certificate-key=@env:CERTIFICATE_PRIVATE_KEY \
             --create
           keychain add-certificates
           xcode-project use-profiles
+          echo "=== Identities in keychain ==="
+          security find-identity -v -p codesigning
+          echo "=== Export options plist ==="
+          cat $HOME/export_options.plist || echo "WARNING: export_options.plist not found"
  
       - name: Set build number (handles first-ever build)
         script: |
