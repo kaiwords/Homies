@@ -13,6 +13,7 @@ workflows:
       vars:
         BUNDLE_ID: "com.kai.poems"
         APP_STORE_APPLE_ID: 6781926631
+        CERTIFICATE_PRIVATE_KEY: $CERTIFICATE_PRIVATE_KEY
       flutter: stable
       xcode: latest
       cocoapods: default
@@ -28,8 +29,7 @@ workflows:
       - name: Set up code signing (creates certificate + profile)
         script: |
           keychain initialize
-          # Generate a private key so a NEW distribution certificate can be created
-          openssl genrsa -out /tmp/cert_key 2048
+          echo "$CERTIFICATE_PRIVATE_KEY" > /tmp/cert_key
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --platform IOS \
             --type IOS_APP_STORE \
