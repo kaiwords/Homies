@@ -10,6 +10,8 @@ workflows:
       app_store_connect: Leasely
  
     environment:
+      groups:
+        - ios_signing
       vars:
         BUNDLE_ID: "com.kai.poems"
         APP_STORE_APPLE_ID: 6781926631
