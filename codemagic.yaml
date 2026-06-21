@@ -31,7 +31,7 @@ workflows:
         script: |
           set -e
           keychain initialize
-          echo "$CERTIFICATE_PRIVATE_KEY" > /tmp/cert_key
+          echo "$CERTIFICATE_PRIVATE_KEY" | base64 --decode > /tmp/cert_key
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --platform IOS \
             --type IOS_APP_STORE \
