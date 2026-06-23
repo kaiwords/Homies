@@ -11,19 +11,38 @@ const complaintThreshold = 100;
 class TenantStats {
   final User user;
   final bool hasActivity;
+  // Cleaning
   final int taskCount;
   final int doneCount;
   final int overdueCount;
   final int excusedCount;
   final double? choreRate;
+  // Bills
   final int billCount;
   final int paidCount;
   final double owed;
   final int lateUnpaid;
   final double? billRate;
+  // Subscriptions
+  final int subCount;
+  final int subPaidCount;
+  final double? subRate;
+  // Groceries
+  final int groceriesCount;
+  final int groceriesPaidCount;
+  final double? groceriesRate;
+  // Necessities
+  final int necessitiesCount;
+  final int necessitiesPaidCount;
+  final double? necessitiesRate;
+  // Engagement
   final int complaintSeverity;
   final int partiesHosted;
+  final int issuesRaised;
+  final int groupMessageCount;
+  // Score
   final int standing;
+
   TenantStats({
     required this.user,
     required this.hasActivity,
@@ -37,8 +56,19 @@ class TenantStats {
     required this.owed,
     required this.lateUnpaid,
     required this.billRate,
+    required this.subCount,
+    required this.subPaidCount,
+    required this.subRate,
+    required this.groceriesCount,
+    required this.groceriesPaidCount,
+    required this.groceriesRate,
+    required this.necessitiesCount,
+    required this.necessitiesPaidCount,
+    required this.necessitiesRate,
     required this.complaintSeverity,
     required this.partiesHosted,
+    required this.issuesRaised,
+    required this.groupMessageCount,
     required this.standing,
   });
 }
@@ -52,25 +82,48 @@ bool _isPast(String? iso) {
 }
 
 TenantStats computeTenantStats(User u, HomiesState s) {
+  // Cleaning
   final tasks = s.cleaningTasks.where((t) => t.assignee == u.id).toList();
   final done = tasks.where((t) => t.done).length;
   final overdue = tasks.where((t) => !t.done && (t.excuse == null || t.excuse!.isEmpty) && _isPast(t.dueDate)).length;
   final excused = tasks.where((t) => (t.excuse != null && t.excuse!.isNotEmpty) && !t.done).length;
   final choreRate = tasks.isEmpty ? null : done / tasks.length;
 
+  // Bills
   final shares = s.bills.where((b) => b.shares.containsKey(u.id)).toList();
   final paid = shares.where((b) => b.paidBy[u.id] == true).length;
   final owed = shares.where((b) => b.paidBy[u.id] != true).fold<double>(0, (a, b) => a + (b.shares[u.id] ?? 0));
   final lateUnpaid = shares.where((b) => b.paidBy[u.id] != true && _isPast(b.dueDate)).length;
   final billRate = shares.isEmpty ? null : paid / shares.length;
 
+  // Subscriptions — track where user is participant but not the payer
+  final subOwed = s.subscriptions.where((sub) => sub.participants.contains(u.id) && sub.payer != u.id).toList();
+  final subPaidCount = subOwed.where((sub) => sub.paidBy[u.id] == true).length;
+  final subRate = subOwed.isEmpty ? null : subPaidCount / subOwed.length;
+
+  // Groceries — shared runs where user owes a share
+  final grocShared = s.groceries.where((g) => g.mode == 'shared' && g.shares.containsKey(u.id) && g.payer != u.id).toList();
+  final grocPaid = grocShared.where((g) => g.paidBy[u.id] == true).length;
+  final groceriesRate = grocShared.isEmpty ? null : grocPaid / grocShared.length;
+
+  // Necessities — shared items where user owes a share
+  final necShared = s.necessities.where((n) => n.mode == 'shared' && n.shares.containsKey(u.id) && n.payer != u.id).toList();
+  final necPaid = necShared.where((n) => n.paidBy[u.id] == true).length;
+  final necessitiesRate = necShared.isEmpty ? null : necPaid / necShared.length;
+
+  // Complaints & parties
   final against = s.complaints.where((c) => c.against == u.id).toList();
   final complaintSeverity = against.fold<int>(0, (a, c) => a + c.severity);
-
+  final issuesRaised = s.complaints.where((c) => c.from == u.id).length;
   final partiesHosted = s.parties.where((p) => p.host == u.id).length;
 
-  final hasActivity = tasks.isNotEmpty || shares.isNotEmpty || against.isNotEmpty || partiesHosted > 0;
+  // Group chat participation
+  final groupMessageCount = s.messages.group.where((m) => m.from == u.id).length;
 
+  final hasActivity = tasks.isNotEmpty || shares.isNotEmpty || against.isNotEmpty ||
+      partiesHosted > 0 || subOwed.isNotEmpty || grocShared.isNotEmpty || necShared.isNotEmpty;
+
+  // Standing score
   final choreScore = choreRate ?? 1.0;
   final billScore = billRate ?? 1.0;
   final complaintScore = (1 - (complaintSeverity / complaintThreshold).clamp(0.0, 1.0)).clamp(0.0, 1.0);
@@ -91,8 +144,19 @@ TenantStats computeTenantStats(User u, HomiesState s) {
     owed: owed,
     lateUnpaid: lateUnpaid,
     billRate: billRate,
+    subCount: subOwed.length,
+    subPaidCount: subPaidCount,
+    subRate: subRate,
+    groceriesCount: grocShared.length,
+    groceriesPaidCount: grocPaid,
+    groceriesRate: groceriesRate,
+    necessitiesCount: necShared.length,
+    necessitiesPaidCount: necPaid,
+    necessitiesRate: necessitiesRate,
     complaintSeverity: complaintSeverity,
     partiesHosted: partiesHosted,
+    issuesRaised: issuesRaised,
+    groupMessageCount: groupMessageCount,
     standing: standing,
   );
 }
@@ -120,5 +184,6 @@ PerfSnapshot snapshotFor(User u, HomiesState s, {String? note}) {
     partiesHosted: st.partiesHosted,
     house: s.property.address,
     note: note,
+    lifestyle: u.lifestyle,
   );
 }

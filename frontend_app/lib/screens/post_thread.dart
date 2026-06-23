@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../state/app_state.dart';
@@ -8,6 +11,7 @@ import '../state/performance.dart';
 import '../theme.dart';
 import '../util/format.dart';
 import '../widgets/avatar.dart';
+import '../widgets/lifestyle_fields.dart';
 import '../widgets/ui_kit.dart';
 
 String _pid(String prefix) => '$prefix-${Random().nextInt(0xFFFFFF).toRadixString(36)}';
@@ -43,8 +47,11 @@ List<PostMessage> threadMessages(HomiesState s, String listingId, String posterI
 
 class PostThreadScreen extends StatefulWidget {
   final Listing listing;
-  final String otherUserId; // the participant who is NOT the poster
-  const PostThreadScreen({super.key, required this.listing, required this.otherUserId});
+  final String otherUserId;
+  // When set, the thread is between initiatorId ↔ otherUserId (not listing.by ↔ otherUserId).
+  // Use this for leaseholder-to-leaseholder threads on a tenant's listing.
+  final String? initiatorId;
+  const PostThreadScreen({super.key, required this.listing, required this.otherUserId, this.initiatorId});
 
   @override
   State<PostThreadScreen> createState() => _PostThreadScreenState();
@@ -53,6 +60,7 @@ class PostThreadScreen extends StatefulWidget {
 class _PostThreadScreenState extends State<PostThreadScreen> {
   final _draftCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
+  Attachment? _pendingPhoto;
 
   @override
   void dispose() {
@@ -61,7 +69,8 @@ class _PostThreadScreenState extends State<PostThreadScreen> {
     super.dispose();
   }
 
-  String get _posterId => widget.listing.by;
+  // For L2L threads the "poster" role is taken by the initiator, not listing.by.
+  String get _posterId => widget.initiatorId ?? widget.listing.by;
 
   void _jumpToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -69,7 +78,7 @@ class _PostThreadScreenState extends State<PostThreadScreen> {
     });
   }
 
-  void _append(HomiesState state, String to, {String text = '', String kind = 'text', PerfSnapshot? perf}) {
+  void _append(HomiesState state, String to, {String text = '', String kind = 'text', PerfSnapshot? perf, Attachment? attachment}) {
     final cu = state.currentUser!;
     state.mutate(() {
       state.postMessages.add(PostMessage(
@@ -81,6 +90,7 @@ class _PostThreadScreenState extends State<PostThreadScreen> {
         at: DateTime.now().toIso8601String(),
         kind: kind,
         perf: perf,
+        attachment: attachment,
       ));
     });
     _jumpToEnd();
@@ -88,9 +98,46 @@ class _PostThreadScreenState extends State<PostThreadScreen> {
 
   void _send(HomiesState state, String otherId) {
     final text = _draftCtrl.text.trim();
-    if (text.isEmpty) return;
-    _append(state, otherId, text: text);
+    if (text.isEmpty && _pendingPhoto == null) return;
+    _append(state, otherId, text: text, attachment: _pendingPhoto);
     _draftCtrl.clear();
+    setState(() => _pendingPhoto = null);
+  }
+
+  Future<void> _pickPhoto() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final f = result.files.first;
+    if (f.bytes == null) return;
+    if (f.size > 2 * 1024 * 1024) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Image too large — keep it under 2 MB.')),
+        );
+      }
+      return;
+    }
+    final ext = (f.extension ?? '').toLowerCase();
+    final type = switch (ext) {
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'png' => 'image/png',
+      'gif' => 'image/gif',
+      'webp' => 'image/webp',
+      _ => 'image/jpeg',
+    };
+    setState(() {
+      _pendingPhoto = Attachment(
+        fileName: f.name,
+        dataUrl: 'data:$type;base64,${base64Encode(f.bytes!)}',
+        type: type,
+        size: f.size,
+        uploadedAt: DateTime.now().toIso8601String(),
+      );
+    });
   }
 
   @override
@@ -159,22 +206,36 @@ class _PostThreadScreenState extends State<PostThreadScreen> {
               onShare: () => _sharePerformance(state, lastRequestToMe.from),
             ),
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
             decoration: const BoxDecoration(
               color: HomiesColors.surface,
               border: Border(top: BorderSide(color: HomiesColors.border)),
             ),
-            child: Row(children: [
-              Expanded(
-                child: TextField(
-                  controller: _draftCtrl,
-                  textInputAction: TextInputAction.send,
-                  decoration: const InputDecoration(hintText: 'Type a message…'),
-                  onSubmitted: (_) => _send(state, otherId),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              if (_pendingPhoto != null)
+                _PendingPhotoPreview(
+                  attachment: _pendingPhoto!,
+                  onRemove: () => setState(() => _pendingPhoto = null),
                 ),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton(onPressed: () => _send(state, otherId), child: const Text('Send')),
+              Row(children: [
+                IconButton(
+                  icon: const Icon(Icons.photo_outlined, size: 22, color: HomiesColors.textDim),
+                  tooltip: 'Send photo',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _pickPhoto,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: TextField(
+                    controller: _draftCtrl,
+                    textInputAction: TextInputAction.send,
+                    decoration: const InputDecoration(hintText: 'Type a message…'),
+                    onSubmitted: (_) => _send(state, otherId),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(onPressed: () => _send(state, otherId), child: const Text('Send')),
+              ]),
             ]),
           ),
         ]),
@@ -266,25 +327,30 @@ class _MessageRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (message.kind == 'perf-request') {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: HomiesColors.accentSoft,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.workspace_premium_outlined, size: 15, color: HomiesColors.accentStrong),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text('🔖 ${message.text}',
-                    style: const TextStyle(fontSize: 12, color: HomiesColors.accentStrong, fontWeight: FontWeight.w500)),
-              ),
-            ]),
-          ),
-        ),
+      return _EventPill(
+        icon: Icons.workspace_premium_outlined,
+        emoji: '🔖',
+        fg: HomiesColors.accentStrong,
+        bg: HomiesColors.accentSoft,
+        text: message.text,
+      );
+    }
+    if (message.kind == 'inspection-invite') {
+      return _EventPill(
+        icon: Icons.calendar_month_outlined,
+        emoji: '📅',
+        fg: HomiesColors.accent,
+        bg: HomiesColors.accentSoft,
+        text: message.text,
+      );
+    }
+    if (message.kind == 'inspection-confirm') {
+      return _EventPill(
+        icon: Icons.check_circle_outline,
+        emoji: '✅',
+        fg: HomiesColors.ok,
+        bg: HomiesColors.okSoft,
+        text: message.text,
       );
     }
 
@@ -294,6 +360,13 @@ class _MessageRow extends StatelessWidget {
     Widget content;
     if (message.kind == 'perf-share' && message.perf != null) {
       content = PerfCard(snapshot: message.perf!, senderName: sender?.name);
+    } else if (message.attachment != null) {
+      content = _PhotoMessage(
+        attachment: message.attachment!,
+        text: message.text,
+        mine: mine,
+        senderName: mine ? null : sender?.name,
+      );
     } else {
       content = Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -334,6 +407,36 @@ class _MessageRow extends StatelessWidget {
   }
 }
 
+class _EventPill extends StatelessWidget {
+  final IconData icon;
+  final String emoji;
+  final Color fg;
+  final Color bg;
+  final String text;
+  const _EventPill({required this.icon, required this.emoji, required this.fg, required this.bg, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 15, color: fg),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text('$emoji $text',
+                  style: TextStyle(fontSize: 12, color: fg, fontWeight: FontWeight.w500)),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
 /// The shareable housemate-reference card. Used inside a perf-share bubble.
 class PerfCard extends StatelessWidget {
   final PerfSnapshot snapshot;
@@ -366,21 +469,21 @@ class PerfCard extends StatelessWidget {
               child: Text(s.subject != null && s.subject!.isNotEmpty ? 'Reference · ${s.subject}' : 'Housemate reference',
                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: HomiesColors.text)),
             ),
-            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text('${s.standing}', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: band.color, height: 1)),
-              const Text('/ 100', style: TextStyle(fontSize: 9, color: HomiesColors.textFaint)),
-            ]),
+            HomiesChip(s.band, tone: band.tone),
           ]),
         ),
         Padding(
           padding: const EdgeInsets.all(14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Align(alignment: Alignment.centerLeft, child: HomiesChip(s.band, tone: band.tone)),
+            _PerfDonut(snapshot: s),
             const SizedBox(height: 10),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
             _row('🧹 Chores', '${s.doneCount}/${s.taskCount} · ${_pct(s.choreRate)}'),
             _row('💡 Bills paid', '${s.paidCount}/${s.billCount} · ${_pct(s.billRate)}'),
             _row('🚩 Complaints', s.complaintSeverity == 0 ? 'None' : '${s.complaintSeverity} pts'),
             _row('🎉 Parties hosted', '${s.partiesHosted}'),
+            if (s.lifestyle != null) ..._lifestyleRows(s.lifestyle!),
             if (s.house.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text('From ${s.house}', style: const TextStyle(fontSize: 11, color: HomiesColors.textFaint)),
@@ -390,7 +493,7 @@ class PerfCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(color: HomiesColors.surface2, borderRadius: BorderRadius.circular(8)),
-                child: Text('“${s.note}”', style: const TextStyle(fontSize: 12, color: HomiesColors.text, height: 1.35)),
+                child: Text('”${s.note}”', style: const TextStyle(fontSize: 12, color: HomiesColors.text, height: 1.35)),
               ),
             ],
           ]),
@@ -403,9 +506,32 @@ class PerfCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Text(label, style: const TextStyle(fontSize: 12, color: HomiesColors.textDim)),
-          Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: HomiesColors.text)),
+          Flexible(child: Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: HomiesColors.text), textAlign: TextAlign.right)),
         ]),
       );
+
+  List<Widget> _lifestyleRows(Lifestyle l) {
+    final items = <(String, String)>[
+      if (l.smoking.isNotEmpty) ('🚬 Smoking', labelFor(smokingOptions, l.smoking)),
+      if (l.alcohol.isNotEmpty) ('🍺 Alcohol', labelFor(alcoholOptions, l.alcohol)),
+      if (l.drugs.isNotEmpty) ('💊 Drugs', labelFor(drugsOptions, l.drugs)),
+      if (l.pets.isNotEmpty) ('🐾 Pets', labelFor(petsOptions, l.pets)),
+      if (l.cleanliness.isNotEmpty) ('🧽 Cleanliness', labelFor(cleanlinessOptions, l.cleanliness)),
+      if (l.schedule.isNotEmpty) ('🕐 Daily rhythm', labelFor(scheduleOptions, l.schedule)),
+      if (l.guests.isNotEmpty) ('🏠 Overnight guests', labelFor(guestsOptions, l.guests)),
+      if (l.diet.isNotEmpty) ('🥗 Diet', labelFor(dietOptions, l.diet)),
+      if (l.occupation.isNotEmpty) ('💼 Occupation', l.occupation),
+    ];
+    if (items.isEmpty) return [];
+    return [
+      const SizedBox(height: 8),
+      const Divider(height: 1, color: HomiesColors.border),
+      const SizedBox(height: 6),
+      const Text('Lifestyle', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: HomiesColors.textDim)),
+      const SizedBox(height: 4),
+      for (final item in items) _row(item.$1, item.$2),
+    ];
+  }
 }
 
 class _RequestPerfBar extends StatelessWidget {
@@ -586,4 +712,225 @@ class _ShareTenantRefModalState extends State<_ShareTenantRefModal> {
       ),
     );
   }
+}
+
+// ─── Photo helpers ───────────────────────────────────────────────────────────
+
+Uint8List? _decodeBytes(Attachment a) {
+  final url = a.dataUrl;
+  if (url == null || !url.startsWith('data:')) return null;
+  final comma = url.indexOf(',');
+  if (comma < 0) return null;
+  try {
+    return base64Decode(url.substring(comma + 1));
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Strip above the input bar showing the staged photo before it's sent.
+class _PendingPhotoPreview extends StatelessWidget {
+  final Attachment attachment;
+  final VoidCallback onRemove;
+  const _PendingPhotoPreview({required this.attachment, required this.onRemove});
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = _decodeBytes(attachment);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (bytes != null)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.memory(bytes, width: 60, height: 60, fit: BoxFit.cover),
+          )
+        else
+          Container(
+            width: 60, height: 60,
+            decoration: BoxDecoration(color: HomiesColors.surface2, borderRadius: BorderRadius.circular(8)),
+            child: const Icon(Icons.image_outlined, color: HomiesColors.textFaint),
+          ),
+        IconButton(
+          icon: const Icon(Icons.close, size: 16, color: HomiesColors.textDim),
+          onPressed: onRemove,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+        ),
+      ]),
+    );
+  }
+}
+
+/// Chat bubble that shows an image (+ optional caption text below it).
+class _PhotoMessage extends StatelessWidget {
+  final Attachment attachment;
+  final String text;
+  final bool mine;
+  final String? senderName;
+  const _PhotoMessage({required this.attachment, required this.text, required this.mine, this.senderName});
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = _decodeBytes(attachment);
+    final bg = mine ? HomiesColors.accent : HomiesColors.surface2;
+    final textColor = mine ? Colors.white : HomiesColors.text;
+
+    return Column(
+      crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        if (senderName != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2, left: 2),
+            child: Text(senderName!, style: const TextStyle(fontSize: 11, color: HomiesColors.textDim, fontWeight: FontWeight.w600)),
+          ),
+        GestureDetector(
+          onTap: bytes == null ? null : () => showDialog(
+            context: context,
+            builder: (_) => Dialog(
+              backgroundColor: Colors.black87,
+              insetPadding: const EdgeInsets.all(16),
+              child: InteractiveViewer(child: Image.memory(bytes)),
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: bytes != null
+                ? Image.memory(bytes, width: 220, fit: BoxFit.fitWidth)
+                : Container(
+                    width: 220, height: 140,
+                    color: HomiesColors.surface2,
+                    child: const Icon(Icons.broken_image_outlined, color: HomiesColors.textFaint, size: 40),
+                  ),
+          ),
+        ),
+        if (text.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+            child: Text(text, style: TextStyle(color: textColor, fontSize: 14)),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ─── Donut chart ─────────────────────────────────────────────────────────────
+
+class _PerfDonut extends StatelessWidget {
+  final PerfSnapshot snapshot;
+  const _PerfDonut({required this.snapshot});
+
+  @override
+  Widget build(BuildContext context) {
+    final band = _bandTone(snapshot.band);
+    final choreScore = (snapshot.choreRate ?? 1.0) * 45;
+    final billScore = (snapshot.billRate ?? 1.0) * 30;
+    final conductScore = (1 - (snapshot.complaintSeverity / 100).clamp(0.0, 1.0)) * 25;
+
+    return Column(children: [
+      SizedBox(
+        width: 130,
+        height: 130,
+        child: CustomPaint(
+          painter: _DonutPainter(
+            choreScore: choreScore,
+            billScore: billScore,
+            conductScore: conductScore,
+          ),
+          child: Center(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text(
+                '${snapshot.standing}',
+                style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: band.color, height: 1),
+              ),
+              const Text('/ 100', style: TextStyle(fontSize: 9, color: HomiesColors.textFaint)),
+            ]),
+          ),
+        ),
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 14,
+        children: const [
+          _LegendDot(color: HomiesColors.ok, label: 'Chores 45'),
+          _LegendDot(color: Color(0xFF4A90D9), label: 'Bills 30'),
+          _LegendDot(color: HomiesColors.warn, label: 'Conduct 25'),
+        ],
+      ),
+    ]);
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  final Color color;
+  final String label;
+  const _LegendDot({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 10, color: HomiesColors.textDim)),
+      ]);
+}
+
+class _DonutPainter extends CustomPainter {
+  final double choreScore;
+  final double billScore;
+  final double conductScore;
+
+  static const _strokeWidth = 14.0;
+  static const _billColor = Color(0xFF4A90D9);
+
+  const _DonutPainter({
+    required this.choreScore,
+    required this.billScore,
+    required this.conductScore,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = min(size.width, size.height) / 2 - _strokeWidth / 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    const startAngle = -pi / 2;
+    const full = 2 * pi;
+
+    canvas.drawArc(
+      rect, 0, full, false,
+      Paint()
+        ..color = HomiesColors.border
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _strokeWidth,
+    );
+
+    Paint slicePaint(Color c) => Paint()
+      ..color = c
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = _strokeWidth
+      ..strokeCap = StrokeCap.butt;
+
+    double cursor = startAngle;
+
+    void arc(double value, Color color) {
+      if (value < 0.5) return;
+      final sweep = (value / 100) * full;
+      canvas.drawArc(rect, cursor, sweep, false, slicePaint(color));
+      cursor += sweep;
+    }
+
+    arc(choreScore, HomiesColors.ok);
+    arc(billScore, _billColor);
+    arc(conductScore, HomiesColors.warn);
+  }
+
+  @override
+  bool shouldRepaint(_DonutPainter old) =>
+      old.choreScore != choreScore ||
+      old.billScore != billScore ||
+      old.conductScore != conductScore;
 }

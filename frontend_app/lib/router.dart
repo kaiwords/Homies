@@ -4,7 +4,7 @@ import 'state/app_state.dart';
 import 'screens/accept_invite.dart';
 import 'screens/admin_users.dart';
 import 'screens/admin_verifications.dart';
-import 'screens/lease_verification.dart';
+import 'screens/finance.dart';
 import 'screens/bills.dart';
 import 'screens/cleaning.dart';
 import 'screens/complaints.dart';
@@ -90,7 +90,7 @@ GoRouter buildRouter(HomiesState state) {
           GoRoute(path: '/app/messages', builder: (_, __) => const MessagesScreen()),
           GoRoute(path: '/app/issues', builder: (_, __) => const IssuesScreen()),
           GoRoute(path: '/app/complaints', builder: (_, __) => const ComplaintsScreen()),
-          GoRoute(path: '/app/lease', builder: (_, __) => const LeaseVerificationScreen()),
+          GoRoute(path: '/app/finance', builder: (_, __) => const FinanceScreen()),
           GoRoute(path: '/app/leaving', builder: (_, __) => const LeavingScreen()),
           GoRoute(path: '/app/termination', builder: (_, __) => const TerminationScreen()),
         ],

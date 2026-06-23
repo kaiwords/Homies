@@ -33,6 +33,8 @@ class HomiesState extends ChangeNotifier {
   List<Grocery> groceries = SeedData.groceries();
   List<CleaningRosterEntry> cleaningRoster = SeedData.roster();
   List<CleaningTask> cleaningTasks = SeedData.tasks();
+  List<CleaningDayAvailability> cleaningAvailability = [];
+  List<RentShare> rentShares = [];
   List<Party> parties = SeedData.parties();
   Messages messages = SeedData.messages();
   List<Complaint> complaints = SeedData.complaints();
@@ -70,16 +72,24 @@ class HomiesState extends ChangeNotifier {
         groceries = ((j['groceries'] as List?) ?? []).map((e) => Grocery.fromJson(e as Map<String, dynamic>)).toList();
         cleaningRoster = ((j['cleaningRoster'] as List?) ?? []).map((e) => CleaningRosterEntry.fromJson(e as Map<String, dynamic>)).toList();
         cleaningTasks = ((j['cleaningTasks'] as List?) ?? []).map((e) => CleaningTask.fromJson(e as Map<String, dynamic>)).toList();
+        cleaningAvailability = ((j['cleaningAvailability'] as List?) ?? []).map((e) => CleaningDayAvailability.fromJson(e as Map<String, dynamic>)).toList();
+        rentShares = ((j['rentShares'] as List?) ?? []).map((e) => RentShare.fromJson(e as Map<String, dynamic>)).toList();
         parties = ((j['parties'] as List?) ?? []).map((e) => Party.fromJson(e as Map<String, dynamic>)).toList();
         messages = j['messages'] != null ? Messages.fromJson(j['messages'] as Map<String, dynamic>) : messages;
         complaints = ((j['complaints'] as List?) ?? []).map((e) => Complaint.fromJson(e as Map<String, dynamic>)).toList();
         issues = ((j['issues'] as List?) ?? []).map((e) => Issue.fromJson(e as Map<String, dynamic>)).toList();
         notices = ((j['notices'] as List?) ?? []).map((e) => Notice.fromJson(e as Map<String, dynamic>)).toList();
         termination = j['termination'] != null ? TerminationPlan.fromJson(j['termination'] as Map<String, dynamic>) : null;
-        listings = ((j['listings'] as List?) ?? []).map((e) => Listing.fromJson(e as Map<String, dynamic>)).toList();
+        // Listings — merge persisted with seed so new seed entries always appear.
+        final loadedListings = ((j['listings'] as List?) ?? []).map((e) => Listing.fromJson(e as Map<String, dynamic>)).toList();
+        final listingIds = loadedListings.map((l) => l.id).toSet();
+        listings = [...loadedListings, ...SeedData.listings().where((l) => !listingIds.contains(l.id))];
         listingInterests = ((j['listingInterests'] as List?) ?? []).map((e) => ListingInterest.fromJson(e as Map<String, dynamic>)).toList();
         inspections = ((j['inspections'] as List?) ?? []).map((e) => Inspection.fromJson(e as Map<String, dynamic>)).toList();
-        postMessages = ((j['postMessages'] as List?) ?? []).map((e) => PostMessage.fromJson(e as Map<String, dynamic>)).toList();
+        // PostMessages — merge persisted with seed so demo conversations always load.
+        final loadedPMs = ((j['postMessages'] as List?) ?? []).map((e) => PostMessage.fromJson(e as Map<String, dynamic>)).toList();
+        final pmIds = loadedPMs.map((m) => m.id).toSet();
+        postMessages = [...loadedPMs, ...SeedData.postMessages().where((m) => !pmIds.contains(m.id))];
         notifyListeners();
       } catch (e) {
         if (kDebugMode) {
@@ -281,6 +291,8 @@ class HomiesState extends ChangeNotifier {
       'groceries': groceries.map((g) => g.toJson()).toList(),
       'cleaningRoster': cleaningRoster.map((r) => r.toJson()).toList(),
       'cleaningTasks': cleaningTasks.map((t) => t.toJson()).toList(),
+      'cleaningAvailability': cleaningAvailability.map((a) => a.toJson()).toList(),
+      'rentShares': rentShares.map((r) => r.toJson()).toList(),
       'parties': parties.map((p) => p.toJson()).toList(),
       'messages': messages.toJson(),
       'complaints': complaints.map((c) => c.toJson()).toList(),
@@ -314,6 +326,8 @@ class HomiesState extends ChangeNotifier {
     groceries = SeedData.groceries();
     cleaningRoster = SeedData.roster();
     cleaningTasks = SeedData.tasks();
+    cleaningAvailability = [];
+    rentShares = [];
     parties = SeedData.parties();
     messages = SeedData.messages();
     complaints = SeedData.complaints();

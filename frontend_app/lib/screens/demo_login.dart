@@ -16,6 +16,7 @@ class DemoLoginScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = HomiesScope.of(context);
+    final currentUser = state.currentUser;
     final demoUsers = SeedData.users();
     final admins = demoUsers.where((u) => u.role == 'admin').toList();
     final leaseholders = demoUsers.where((u) => u.role == 'leaseholder').toList();
@@ -42,7 +43,7 @@ class DemoLoginScreen extends StatelessWidget {
                     text: 'Pick a housemate to jump straight in — no username or password needed.',
                   ),
                   const SizedBox(height: 16),
-                  if (admins.isNotEmpty) ...[
+                  if (admins.isNotEmpty && currentUser?.isAdmin == true) ...[
                     const _GroupLabel('ADMIN'),
                     const SizedBox(height: 8),
                     for (final u in admins) _DemoAccountTile(user: u, onTap: () => enter(u)),

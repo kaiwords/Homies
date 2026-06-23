@@ -123,6 +123,14 @@ class _UserCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cu = HomiesScope.of(context).currentUser;
+    final canSeeFull = cu?.id == user.id || (cu?.isAdmin ?? false) || (cu?.isLeaseholder ?? false);
+    final showEmail = canSeeFull || user.shareEmail;
+    final showPhone = canSeeFull || user.sharePhone;
+    final contactParts = <String>[
+      if (showEmail && user.email.isNotEmpty) user.email,
+      if (showPhone && user.phone.isNotEmpty) user.phone,
+    ];
     return HomiesCard(
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Avatar.lg(user),
@@ -138,7 +146,8 @@ class _UserCard extends StatelessWidget {
               if (isApprovalComplete(user)) const HomiesChip('active', tone: ChipTone.ok),
             ]),
             const SizedBox(height: 4),
-            Text('${user.email} · ${user.phone}', style: const TextStyle(color: HomiesColors.textDim, fontSize: 12)),
+            if (contactParts.isNotEmpty)
+              Text(contactParts.join(' · '), style: const TextStyle(color: HomiesColors.textDim, fontSize: 12)),
             Text(
               '${user.moveInDate != null ? 'Moved in ${fmtDate(user.moveInDate)}' : 'Not moved in yet'}'
               '${user.bondPaid ? ' · bond ${fmtAUD(user.bondAmount)}' : ''}',
@@ -227,9 +236,11 @@ class _UserMenu extends StatelessWidget {
   void _viewDetails(BuildContext context, User user) {
     final state = HomiesScope.of(context);
     final cu = state.currentUser;
-    // You always see your own; a leaseholder sees everyone's; otherwise it's
-    // only visible if the owner opted to share it.
-    final canSeeEmergency = user.id == cu?.id || cu?.role == 'leaseholder' || user.shareEmergency;
+    final canSeeFull = user.id == cu?.id || (cu?.isAdmin ?? false) || (cu?.isLeaseholder ?? false);
+    final canSeeEmail = canSeeFull || user.shareEmail;
+    final canSeePhone = canSeeFull || user.sharePhone;
+    final canSeeLifestyle = canSeeFull || user.shareLifestyle;
+    final canSeeEmergency = canSeeFull || user.shareEmergency;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -250,16 +261,35 @@ class _UserMenu extends StatelessWidget {
                 ),
               ]),
               const SizedBox(height: 4),
-              Text('${user.email}${user.phone.isNotEmpty ? ' · ${user.phone}' : ''}',
-                  style: const TextStyle(color: HomiesColors.textDim, fontSize: 12)),
+              Wrap(spacing: 8, runSpacing: 2, children: [
+                if (canSeeEmail)
+                  Text(user.email, style: const TextStyle(color: HomiesColors.textDim, fontSize: 12))
+                else
+                  _privateLabel('Email'),
+                if (user.phone.isNotEmpty)
+                  if (canSeePhone)
+                    Text(user.phone, style: const TextStyle(color: HomiesColors.textDim, fontSize: 12))
+                  else
+                    _privateLabel('Phone'),
+              ]),
               const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, color: HomiesColors.border)),
-              if (user.profileComplete)
-                LifestyleSummary(
-                  lifestyle: user.lifestyle,
-                  emergency: canSeeEmergency ? user.emergency : null,
-                  emergencyPrivate: !canSeeEmergency && (user.emergency?.isComplete ?? false),
-                )
-              else
+              if (user.profileComplete) ...[
+                if (canSeeLifestyle)
+                  LifestyleSummary(
+                    lifestyle: user.lifestyle,
+                    emergency: canSeeEmergency ? user.emergency : null,
+                    emergencyPrivate: !canSeeEmergency && (user.emergency?.isComplete ?? false),
+                  )
+                else ...[
+                  _privateLabel('Lifestyle profile'),
+                  const SizedBox(height: 8),
+                  LifestyleSummary(
+                    lifestyle: null,
+                    emergency: canSeeEmergency ? user.emergency : null,
+                    emergencyPrivate: !canSeeEmergency && (user.emergency?.isComplete ?? false),
+                  ),
+                ],
+              ] else
                 const Text("This housemate hasn't completed their lifestyle profile yet.",
                     style: TextStyle(color: HomiesColors.textDim, fontSize: 13)),
             ]),
@@ -337,6 +367,15 @@ class _ReportModalState extends State<_ReportModal> {
     );
   }
 }
+
+Widget _privateLabel(String label) => Row(
+  mainAxisSize: MainAxisSize.min,
+  children: [
+    const Icon(Icons.lock_outline, size: 12, color: HomiesColors.textFaint),
+    const SizedBox(width: 3),
+    Text('$label private', style: const TextStyle(color: HomiesColors.textFaint, fontSize: 12, fontStyle: FontStyle.italic)),
+  ],
+);
 
 class _ApprovalCard extends StatelessWidget {
   final User user;

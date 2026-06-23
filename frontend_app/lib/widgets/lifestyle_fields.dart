@@ -42,6 +42,17 @@ const dietOptions = [
   ('halal', 'Halal'),
   ('other', 'Other'),
 ];
+const drugsOptions = [
+  ('no', 'No drug use'),
+  ('occasionally', 'Occasionally'),
+  ('regularly', 'Regularly'),
+];
+const cleanlinessOptions = [
+  ('very-tidy', 'Very tidy'),
+  ('tidy', 'Tidy'),
+  ('average', 'Average'),
+  ('messy', 'Messy'),
+];
 
 String labelFor(List<(String, String)> options, String value) =>
     options.firstWhere((o) => o.$1 == value, orElse: () => (value, value)).$2;
@@ -146,10 +157,12 @@ class _LifestyleEmergencyFormState extends State<LifestyleEmergencyForm> {
       ),
       _segment('Smoking', smokingOptions, _l.smoking, (v) => _l.smoking = v),
       _segment('Alcohol', alcoholOptions, _l.alcohol, (v) => _l.alcohol = v),
+      _dropdown('Recreational drugs', drugsOptions, _l.drugs, (v) => _l.drugs = v),
       _dropdown('Relationship status', relationshipOptions, _l.relationship, (v) => _l.relationship = v),
       _segment('Pets', petsOptions, _l.pets, (v) => _l.pets = v),
       _segment('Daily rhythm', scheduleOptions, _l.schedule, (v) => _l.schedule = v),
       _segment('Overnight guests', guestsOptions, _l.guests, (v) => _l.guests = v),
+      _segment('Cleanliness', cleanlinessOptions, _l.cleanliness, (v) => _l.cleanliness = v),
       _dropdown('Diet', dietOptions, _l.diet, (v) => _l.diet = v),
       const FieldLabel('Occupation'),
       TextField(controller: _occupation, decoration: const InputDecoration(hintText: 'e.g. Nurse, student, engineer')),
@@ -190,10 +203,12 @@ class LifestyleSummary extends StatelessWidget {
     final rows = <(String, String)>[
       if (l != null && l.smoking.isNotEmpty) ('Smoking', labelFor(smokingOptions, l.smoking)),
       if (l != null && l.alcohol.isNotEmpty) ('Alcohol', labelFor(alcoholOptions, l.alcohol)),
+      if (l != null && l.drugs.isNotEmpty) ('Recreational drugs', labelFor(drugsOptions, l.drugs)),
       if (l != null && l.relationship.isNotEmpty) ('Relationship', labelFor(relationshipOptions, l.relationship)),
       if (l != null && l.pets.isNotEmpty) ('Pets', labelFor(petsOptions, l.pets)),
       if (l != null && l.schedule.isNotEmpty) ('Daily rhythm', labelFor(scheduleOptions, l.schedule)),
       if (l != null && l.guests.isNotEmpty) ('Guests', labelFor(guestsOptions, l.guests)),
+      if (l != null && l.cleanliness.isNotEmpty) ('Cleanliness', labelFor(cleanlinessOptions, l.cleanliness)),
       if (l != null && l.diet.isNotEmpty) ('Diet', labelFor(dietOptions, l.diet)),
       if (l != null && l.occupation.isNotEmpty) ('Occupation', l.occupation),
     ];

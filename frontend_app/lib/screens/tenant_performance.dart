@@ -118,10 +118,41 @@ class _TenantCard extends StatelessWidget {
             if (t.lateUnpaid > 0) HomiesChip('${t.lateUnpaid} overdue', tone: ChipTone.danger),
           ],
         ),
+        if (t.subCount > 0) ...[
+          const SizedBox(height: 12),
+          _metric(
+            label: '📦 Subscriptions',
+            value: '${t.subPaidCount}/${t.subCount} · ${_pct(t.subRate)}',
+            progress: t.subRate,
+            extras: [],
+          ),
+        ],
+        if (t.groceriesCount > 0) ...[
+          const SizedBox(height: 12),
+          _metric(
+            label: '🛒 Groceries',
+            value: '${t.groceriesPaidCount}/${t.groceriesCount} · ${_pct(t.groceriesRate)}',
+            progress: t.groceriesRate,
+            extras: [],
+          ),
+        ],
+        if (t.necessitiesCount > 0) ...[
+          const SizedBox(height: 12),
+          _metric(
+            label: '🧴 Necessities',
+            value: '${t.necessitiesPaidCount}/${t.necessitiesCount} · ${_pct(t.necessitiesRate)}',
+            progress: t.necessitiesRate,
+            extras: [],
+          ),
+        ],
         const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, color: HomiesColors.border)),
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Wrap(spacing: 12, runSpacing: 6, children: [
           Text('🚩 ${t.complaintSeverity} complaint pts', style: const TextStyle(fontSize: 12, color: HomiesColors.textDim)),
           Text('🎉 ${t.partiesHosted} parties hosted', style: const TextStyle(fontSize: 12, color: HomiesColors.textDim)),
+          if (t.issuesRaised > 0)
+            Text('🔧 ${t.issuesRaised} issue${t.issuesRaised == 1 ? '' : 's'} raised', style: const TextStyle(fontSize: 12, color: HomiesColors.textDim)),
+          if (t.groupMessageCount > 0)
+            Text('💬 ${t.groupMessageCount} msg${t.groupMessageCount == 1 ? '' : 's'} sent', style: const TextStyle(fontSize: 12, color: HomiesColors.textDim)),
         ]),
       ]),
     );

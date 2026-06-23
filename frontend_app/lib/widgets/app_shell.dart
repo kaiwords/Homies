@@ -21,7 +21,7 @@ const navSections = <NavSection>[
   NavSection('/app/property', 'Property & lease', Icons.description_outlined, 'primary'),
   NavSection('/app/housemates', 'Housemates', Icons.people_outline, 'primary'),
   NavSection('/app/performance', 'Tenant performance', Icons.insights_outlined, 'primary', leaseholderOnly: true),
-  NavSection('/app/lease', 'Lease verification', Icons.verified_user_outlined, 'primary', leaseholderOnly: true),
+  NavSection('/app/finance', 'Finance', Icons.account_balance_wallet_outlined, 'money'),
   NavSection('/app/bills', 'Bills', Icons.receipt_long_outlined, 'money'),
   NavSection('/app/subscriptions', 'Subscriptions', Icons.subscriptions_outlined, 'money'),
   NavSection('/app/groceries', 'Groceries', Icons.shopping_cart_outlined, 'money'),
@@ -29,7 +29,6 @@ const navSections = <NavSection>[
   NavSection('/app/cleaning', 'Cleaning', Icons.cleaning_services_outlined, 'living'),
   NavSection('/app/rules', 'House rules', Icons.gavel_outlined, 'living'),
   NavSection('/app/parties', 'Parties', Icons.celebration_outlined, 'living'),
-  NavSection('/app/messages', 'Messages', Icons.chat_bubble_outline, 'living'),
   NavSection('/app/issues', 'House issues', Icons.build_outlined, 'living'),
   NavSection('/app/complaints', 'Complaints', Icons.flag_outlined, 'living'),
   NavSection('/app/listings', 'Rooms & housemates', Icons.storefront_outlined, 'marketplace'),
@@ -45,7 +44,7 @@ const groupLabels = {
   'exit': 'Wrap up',
 };
 
-const bottomNavPaths = ['/app', '/app/bills', '/app/cleaning', '/app/messages'];
+const bottomNavPaths = ['/app', '/app/finance', '/app/cleaning', '/app/messages'];
 
 class AppShell extends StatelessWidget {
   final Widget child;
@@ -56,6 +55,7 @@ class AppShell extends StatelessWidget {
     for (var i = 0; i < bottomNavPaths.length; i++) {
       if (currentLocation == bottomNavPaths[i]) return i;
     }
+    if (currentLocation.startsWith('/app/finance')) return 1;
     if (currentLocation.startsWith('/app/bills')) return 1;
     if (currentLocation.startsWith('/app/cleaning')) return 2;
     if (currentLocation.startsWith('/app/messages')) return 3;
@@ -109,10 +109,21 @@ class AppShell extends StatelessWidget {
                   ),
                 ),
                 const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'switch',
+                  child: ListTile(
+                    leading: Icon(Icons.swap_horiz_rounded),
+                    title: Text('Switch demo account'),
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                  ),
+                ),
                 const PopupMenuItem(value: 'signout', child: Text('Sign out')),
               ],
               onSelected: (v) async {
-                if (v == 'signout') {
+                if (v == 'switch') {
+                  if (context.mounted) context.push('/demo');
+                } else if (v == 'signout') {
                   await state.signOut();
                   if (context.mounted) context.go('/login');
                 }
@@ -164,7 +175,7 @@ class AppShell extends StatelessWidget {
         onTap: (i) => context.go(bottomNavPaths[i]),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt_long_outlined), label: 'Bills'),
+          BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet_outlined), label: 'Finance'),
           BottomNavigationBarItem(icon: Icon(Icons.cleaning_services_outlined), label: 'Cleaning'),
           BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
         ],

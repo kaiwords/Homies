@@ -127,23 +127,27 @@ class Submissions {
 class Lifestyle {
   String smoking; // non-smoker | outside-only | smoker
   String alcohol; // none | social | regular
+  String drugs; // no | occasionally | regularly
   String relationship; // single | relationship | married
   String pets; // none | has-pets
   String diet; // none | vegetarian | vegan | halal | other
   String occupation; // free text
   String schedule; // early-bird | flexible | night-owl
   String guests; // rarely | sometimes | often
+  String cleanliness; // very-tidy | tidy | average | messy
   String about; // free-text intro
 
   Lifestyle({
     this.smoking = '',
     this.alcohol = '',
+    this.drugs = '',
     this.relationship = '',
     this.pets = '',
     this.diet = '',
     this.occupation = '',
     this.schedule = '',
     this.guests = '',
+    this.cleanliness = '',
     this.about = '',
   });
 
@@ -154,12 +158,14 @@ class Lifestyle {
   Map<String, dynamic> toJson() => {
         'smoking': smoking,
         'alcohol': alcohol,
+        'drugs': drugs,
         'relationship': relationship,
         'pets': pets,
         'diet': diet,
         'occupation': occupation,
         'schedule': schedule,
         'guests': guests,
+        'cleanliness': cleanliness,
         'about': about,
       };
 
@@ -168,12 +174,14 @@ class Lifestyle {
     return Lifestyle(
       smoking: (j['smoking'] ?? '') as String,
       alcohol: (j['alcohol'] ?? '') as String,
+      drugs: (j['drugs'] ?? '') as String,
       relationship: (j['relationship'] ?? '') as String,
       pets: (j['pets'] ?? '') as String,
       diet: (j['diet'] ?? '') as String,
       occupation: (j['occupation'] ?? '') as String,
       schedule: (j['schedule'] ?? '') as String,
       guests: (j['guests'] ?? '') as String,
+      cleanliness: (j['cleanliness'] ?? '') as String,
       about: (j['about'] ?? '') as String,
     );
   }
@@ -282,9 +290,15 @@ class User {
   // can always see everyone's; this only governs tenant-to-tenant visibility.
   // Defaults to private — the owner opts in to sharing.
   bool shareEmergency;
+  bool sharePhone;
+  bool shareEmail;
+  bool shareLifestyle;
   Submissions? submissions;
   // Leaseholder-only: their lease agreement submission for admin verification.
   LeaseVerification? leaseVerification;
+  // Tenant-only: reference to their current/previous leaseholder on Homies.
+  String? leaseholderUserId; // Homies user ID of the leaseholder
+  String? leaseholderName;   // display name (shown when user not on platform)
 
   User({
     required this.id,
@@ -305,8 +319,13 @@ class User {
     this.lifestyle,
     this.emergency,
     this.shareEmergency = false,
+    this.sharePhone = true,
+    this.shareEmail = true,
+    this.shareLifestyle = true,
     this.submissions,
     this.leaseVerification,
+    this.leaseholderUserId,
+    this.leaseholderName,
   });
 
   bool get isAdmin => role == 'admin';
@@ -335,8 +354,13 @@ class User {
         'lifestyle': lifestyle?.toJson(),
         'emergency': emergency?.toJson(),
         'shareEmergency': shareEmergency,
+        'sharePhone': sharePhone,
+        'shareEmail': shareEmail,
+        'shareLifestyle': shareLifestyle,
         'submissions': submissions?.toJson(),
         'leaseVerification': leaseVerification?.toJson(),
+        'leaseholderUserId': leaseholderUserId,
+        'leaseholderName': leaseholderName,
       };
 
   factory User.fromJson(Map<String, dynamic> j) => User(
@@ -358,8 +382,13 @@ class User {
         lifestyle: Lifestyle.fromJson(j['lifestyle'] as Map<String, dynamic>?),
         emergency: EmergencyContact.fromJson(j['emergency'] as Map<String, dynamic>?),
         shareEmergency: (j['shareEmergency'] ?? false) as bool,
+        sharePhone: (j['sharePhone'] ?? true) as bool,
+        shareEmail: (j['shareEmail'] ?? true) as bool,
+        shareLifestyle: (j['shareLifestyle'] ?? true) as bool,
         submissions: Submissions.fromJson(j['submissions'] as Map<String, dynamic>?),
         leaseVerification: LeaseVerification.fromJson(j['leaseVerification'] as Map<String, dynamic>?),
+        leaseholderUserId: j['leaseholderUserId'] as String?,
+        leaseholderName: j['leaseholderName'] as String?,
       );
 }
 
@@ -382,6 +411,9 @@ class Property {
   int maxOccupants;
   bool setupComplete;
   String cleaningCadence; // 'weekly' | 'fortnightly' | 'monthly'
+  bool cleaningAvailabilityRequested;
+  String? leaseNotificationSentAt;
+  String? rentShareExplanation;
 
   Property({
     required this.id,
@@ -402,6 +434,9 @@ class Property {
     this.maxOccupants = 4,
     this.setupComplete = false,
     this.cleaningCadence = 'weekly',
+    this.cleaningAvailabilityRequested = false,
+    this.leaseNotificationSentAt,
+    this.rentShareExplanation,
   }) : features = features ?? {};
 
   Map<String, dynamic> toJson() => {
@@ -423,6 +458,9 @@ class Property {
         'maxOccupants': maxOccupants,
         'setupComplete': setupComplete,
         'cleaningCadence': cleaningCadence,
+        'cleaningAvailabilityRequested': cleaningAvailabilityRequested,
+        'leaseNotificationSentAt': leaseNotificationSentAt,
+        'rentShareExplanation': rentShareExplanation,
       };
 
   factory Property.fromJson(Map<String, dynamic> j) => Property(
@@ -444,6 +482,9 @@ class Property {
         maxOccupants: ((j['maxOccupants'] ?? 4) as num).toInt(),
         setupComplete: (j['setupComplete'] ?? false) as bool,
         cleaningCadence: (j['cleaningCadence'] ?? 'weekly') as String,
+        cleaningAvailabilityRequested: (j['cleaningAvailabilityRequested'] ?? false) as bool,
+        leaseNotificationSentAt: j['leaseNotificationSentAt'] as String?,
+        rentShareExplanation: j['rentShareExplanation'] as String?,
       );
 }
 
@@ -532,6 +573,7 @@ class Bill {
   Map<String, Payment> payments; // saved payment records, keyed by payerId
   String? scheduleId;
   Attachment? proof;
+  Attachment? receipt;
 
   Bill({
     required this.id,
@@ -549,6 +591,7 @@ class Bill {
     Map<String, Payment>? payments,
     this.scheduleId,
     this.proof,
+    this.receipt,
   })  : paidBy = paidBy ?? {},
         payments = payments ?? {};
 
@@ -568,6 +611,7 @@ class Bill {
         'payments': payments.map((k, v) => MapEntry(k, v.toJson())),
         'scheduleId': scheduleId,
         'proof': proof?.toJson(),
+        'receipt': receipt?.toJson(),
       };
 
   factory Bill.fromJson(Map<String, dynamic> j) => Bill(
@@ -587,6 +631,7 @@ class Bill {
             .map((k, v) => MapEntry(k.toString(), Payment.fromJson(v as Map<String, dynamic>))),
         scheduleId: j['scheduleId'] as String?,
         proof: Attachment.fromJson(j['proof'] as Map<String, dynamic>?),
+        receipt: Attachment.fromJson(j['receipt'] as Map<String, dynamic>?),
       );
 }
 
@@ -659,6 +704,9 @@ class Subscription {
   List<String> participants;
   String split;
   Map<String, double> shares;
+  Map<String, bool> paidBy;
+  Map<String, Payment> payments;
+  Attachment? receipt;
 
   Subscription({
     required this.id,
@@ -669,7 +717,11 @@ class Subscription {
     required this.participants,
     this.split = 'equal',
     required this.shares,
-  });
+    Map<String, bool>? paidBy,
+    Map<String, Payment>? payments,
+    this.receipt,
+  })  : paidBy = paidBy ?? {},
+        payments = payments ?? {};
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -680,6 +732,9 @@ class Subscription {
         'participants': participants,
         'split': split,
         'shares': shares,
+        'paidBy': paidBy,
+        'payments': payments.map((k, v) => MapEntry(k, v.toJson())),
+        'receipt': receipt?.toJson(),
       };
 
   factory Subscription.fromJson(Map<String, dynamic> j) => Subscription(
@@ -691,6 +746,10 @@ class Subscription {
         participants: ((j['participants'] as List?) ?? []).map((e) => e.toString()).toList(),
         split: (j['split'] ?? 'equal') as String,
         shares: ((j['shares'] as Map?) ?? {}).map((k, v) => MapEntry(k.toString(), (v as num).toDouble())),
+        paidBy: ((j['paidBy'] as Map?) ?? {}).map((k, v) => MapEntry(k.toString(), v as bool)),
+        payments: ((j['payments'] as Map?) ?? {})
+            .map((k, v) => MapEntry(k.toString(), Payment.fromJson(v as Map<String, dynamic>))),
+        receipt: Attachment.fromJson(j['receipt'] as Map<String, dynamic>?),
       );
 }
 
@@ -764,6 +823,9 @@ class Grocery {
   Map<String, double> shares;
   String date;
   Attachment? receipt;
+  Map<String, bool> paidBy;
+  Map<String, Payment> payments;
+
   Grocery({
     required this.id,
     required this.title,
@@ -774,7 +836,11 @@ class Grocery {
     required this.shares,
     required this.date,
     this.receipt,
-  });
+    Map<String, bool>? paidBy,
+    Map<String, Payment>? payments,
+  })  : paidBy = paidBy ?? {},
+        payments = payments ?? {};
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'title': title,
@@ -785,7 +851,10 @@ class Grocery {
         'shares': shares,
         'date': date,
         'receipt': receipt?.toJson(),
+        'paidBy': paidBy,
+        'payments': payments.map((k, v) => MapEntry(k, v.toJson())),
       };
+
   factory Grocery.fromJson(Map<String, dynamic> j) => Grocery(
         id: j['id'] as String,
         title: j['title'] as String,
@@ -796,6 +865,9 @@ class Grocery {
         shares: ((j['shares'] as Map?) ?? {}).map((k, v) => MapEntry(k.toString(), (v as num).toDouble())),
         date: (j['date'] ?? '') as String,
         receipt: Attachment.fromJson(j['receipt'] as Map<String, dynamic>?),
+        paidBy: ((j['paidBy'] as Map?) ?? {}).map((k, v) => MapEntry(k.toString(), v as bool)),
+        payments: ((j['payments'] as Map?) ?? {})
+            .map((k, v) => MapEntry(k.toString(), Payment.fromJson(v as Map<String, dynamic>))),
       );
 }
 
@@ -819,6 +891,7 @@ class CleaningTask {
   String dueDate;
   bool done;
   Attachment? photo;
+  Attachment? receipt;
   String? excuse;
   String? completedAt;
 
@@ -829,6 +902,7 @@ class CleaningTask {
     required this.dueDate,
     this.done = false,
     this.photo,
+    this.receipt,
     this.excuse,
     this.completedAt,
   });
@@ -840,6 +914,7 @@ class CleaningTask {
         'dueDate': dueDate,
         'done': done,
         'photo': photo?.toJson(),
+        'receipt': receipt?.toJson(),
         'excuse': excuse,
         'completedAt': completedAt,
       };
@@ -850,8 +925,57 @@ class CleaningTask {
         dueDate: (j['dueDate'] ?? '') as String,
         done: (j['done'] ?? false) as bool,
         photo: Attachment.fromJson(j['photo'] as Map<String, dynamic>?),
+        receipt: Attachment.fromJson(j['receipt'] as Map<String, dynamic>?),
         excuse: j['excuse'] as String?,
         completedAt: j['completedAt'] as String?,
+      );
+}
+
+class CleaningDayAvailability {
+  String userId;
+  String day; // 'Mon' | 'Tue' | ...
+  String status; // 'available' | 'na'
+
+  CleaningDayAvailability({required this.userId, required this.day, required this.status});
+
+  Map<String, dynamic> toJson() => {'userId': userId, 'day': day, 'status': status};
+
+  factory CleaningDayAvailability.fromJson(Map<String, dynamic> j) => CleaningDayAvailability(
+        userId: j['userId'] as String,
+        day: j['day'] as String,
+        status: j['status'] as String,
+      );
+}
+
+class RentShare {
+  String userId;
+  double amount;
+  bool hasParking;
+  bool hasBalcony;
+  bool hasPrivateWashroom;
+
+  RentShare({
+    required this.userId,
+    required this.amount,
+    this.hasParking = false,
+    this.hasBalcony = false,
+    this.hasPrivateWashroom = false,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'userId': userId,
+        'amount': amount,
+        'hasParking': hasParking,
+        'hasBalcony': hasBalcony,
+        'hasPrivateWashroom': hasPrivateWashroom,
+      };
+
+  factory RentShare.fromJson(Map<String, dynamic> j) => RentShare(
+        userId: j['userId'] as String,
+        amount: ((j['amount'] ?? 0) as num).toDouble(),
+        hasParking: (j['hasParking'] ?? false) as bool,
+        hasBalcony: (j['hasBalcony'] ?? false) as bool,
+        hasPrivateWashroom: (j['hasPrivateWashroom'] ?? false) as bool,
       );
 }
 
@@ -1217,6 +1341,12 @@ class Listing {
   String description;
   String status; // 'open' | 'closed'
   String createdAt;
+  bool billsIncluded;
+  String? alcoholPref;   // 'yes' | 'no' | 'social'
+  String? smokingPref;   // 'yes' | 'no' | 'outside'
+  String? genderPref;    // 'any' | 'female' | 'male' | 'non-binary'
+  bool hasPool;
+  bool hasParking;
 
   Listing({
     required this.id,
@@ -1230,6 +1360,12 @@ class Listing {
     this.description = '',
     this.status = 'open',
     required this.createdAt,
+    this.billsIncluded = false,
+    this.alcoholPref,
+    this.smokingPref,
+    this.genderPref,
+    this.hasPool = false,
+    this.hasParking = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -1244,6 +1380,12 @@ class Listing {
         'description': description,
         'status': status,
         'createdAt': createdAt,
+        'billsIncluded': billsIncluded,
+        'alcoholPref': alcoholPref,
+        'smokingPref': smokingPref,
+        'genderPref': genderPref,
+        'hasPool': hasPool,
+        'hasParking': hasParking,
       };
 
   factory Listing.fromJson(Map<String, dynamic> j) => Listing(
@@ -1258,6 +1400,12 @@ class Listing {
         description: (j['description'] ?? '') as String,
         status: (j['status'] ?? 'open') as String,
         createdAt: (j['createdAt'] ?? '') as String,
+        billsIncluded: (j['billsIncluded'] as bool?) ?? false,
+        alcoholPref: j['alcoholPref'] as String?,
+        smokingPref: j['smokingPref'] as String?,
+        genderPref: j['genderPref'] as String?,
+        hasPool: (j['hasPool'] as bool?) ?? false,
+        hasParking: (j['hasParking'] as bool?) ?? false,
       );
 }
 
@@ -1380,6 +1528,7 @@ class PerfSnapshot {
   String house; // address / context the record is from
   String? note; // optional free-text from the tenant
   String? subject; // tenant the reference is about (set when a leaseholder vouches)
+  Lifestyle? lifestyle; // snapshot of the tenant's lifestyle answers
 
   PerfSnapshot({
     required this.standing,
@@ -1395,6 +1544,7 @@ class PerfSnapshot {
     this.house = '',
     this.note,
     this.subject,
+    this.lifestyle,
   });
 
   Map<String, dynamic> toJson() => {
@@ -1411,6 +1561,7 @@ class PerfSnapshot {
         'house': house,
         'note': note,
         'subject': subject,
+        'lifestyle': lifestyle?.toJson(),
       };
 
   static PerfSnapshot? fromJson(Map<String, dynamic>? j) {
@@ -1429,6 +1580,7 @@ class PerfSnapshot {
       house: (j['house'] ?? '') as String,
       note: j['note'] as String?,
       subject: j['subject'] as String?,
+      lifestyle: Lifestyle.fromJson(j['lifestyle'] as Map<String, dynamic>?),
     );
   }
 }
@@ -1445,6 +1597,7 @@ class PostMessage {
   String at;
   String kind; // 'text' | 'perf-request' | 'perf-share'
   PerfSnapshot? perf;
+  Attachment? attachment;
 
   PostMessage({
     required this.id,
@@ -1455,6 +1608,7 @@ class PostMessage {
     required this.at,
     this.kind = 'text',
     this.perf,
+    this.attachment,
   });
 
   Map<String, dynamic> toJson() => {
@@ -1466,6 +1620,7 @@ class PostMessage {
         'at': at,
         'kind': kind,
         'perf': perf?.toJson(),
+        'attachment': attachment?.toJson(),
       };
 
   factory PostMessage.fromJson(Map<String, dynamic> j) => PostMessage(
@@ -1477,5 +1632,6 @@ class PostMessage {
         at: (j['at'] ?? '') as String,
         kind: (j['kind'] ?? 'text') as String,
         perf: PerfSnapshot.fromJson(j['perf'] as Map<String, dynamic>?),
+        attachment: Attachment.fromJson(j['attachment'] as Map<String, dynamic>?),
       );
 }

@@ -79,7 +79,15 @@ class Segment<T> extends StatelessWidget {
   final T value;
   final String Function(T) labelFor;
   final ValueChanged<T> onChanged;
-  const Segment({super.key, required this.options, required this.value, required this.labelFor, required this.onChanged});
+  final EdgeInsetsGeometry optionPadding;
+  const Segment({
+    super.key,
+    required this.options,
+    required this.value,
+    required this.labelFor,
+    required this.onChanged,
+    this.optionPadding = const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -96,7 +104,7 @@ class Segment<T> extends StatelessWidget {
             InkWell(
               onTap: () => onChanged(options[i]),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                padding: optionPadding,
                 decoration: BoxDecoration(
                   color: options[i] == value ? HomiesColors.accentSoft : Colors.transparent,
                   borderRadius: BorderRadius.horizontal(

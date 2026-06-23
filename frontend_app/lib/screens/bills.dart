@@ -206,6 +206,43 @@ class _BillCard extends StatelessWidget {
           const Text('Proof of bill', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: HomiesColors.textDim)),
           AttachmentTile(value: b.proof!, compact: true),
         ],
+        const SizedBox(height: 6),
+        if (b.receipt != null) ...[
+          const Text('Payment receipt', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: HomiesColors.textDim)),
+          AttachmentTile(value: b.receipt!, compact: true),
+          const SizedBox(height: 4),
+        ],
+        OutlinedButton.icon(
+          onPressed: () => showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            builder: (_) => Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Text('Attach payment receipt', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                const SizedBox(height: 10),
+                FilePickerButton(
+                  value: b.receipt,
+                  onChanged: (f) {
+                    state.mutate(() => b.receipt = f);
+                    Navigator.pop(context);
+                  },
+                  label: 'Choose image or PDF',
+                ),
+                if (b.receipt != null)
+                  TextButton(
+                    onPressed: () {
+                      state.mutate(() => b.receipt = null);
+                      Navigator.pop(context);
+                    },
+                    child: const Text('Remove receipt', style: TextStyle(color: HomiesColors.danger)),
+                  ),
+              ]),
+            ),
+          ),
+          icon: const Icon(Icons.receipt_outlined, size: 14),
+          label: Text(b.receipt == null ? 'Attach receipt' : 'Replace receipt', style: const TextStyle(fontSize: 12)),
+        ),
         const Divider(),
         for (final entry in b.shares.entries)
           _ShareRow(billId: b.id, userId: entry.key, amount: entry.value, bill: b, cu: cu),

@@ -95,8 +95,14 @@ class _CleaningScreenState extends State<CleaningScreen> {
                       ),
                   ]),
                 ),
+              if (isLeaseholder) ...[
+                const SizedBox(height: 12),
+                const Divider(),
+                _AvailabilitySummary(),
+              ],
             ]),
           ),
+          if (!isLeaseholder) _TenantAvailabilityCard(userId: cu.id),
           HomiesCard(
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               const Text('Tasks', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
@@ -167,7 +173,12 @@ class _RosterTile extends StatelessWidget {
         const SizedBox(height: 4),
         if (isLeaseholder)
           DropdownButton<String>(
-            value: row?.assignee.isNotEmpty == true ? row!.assignee : null,
+            value: () {
+              final id = row?.assignee ?? '';
+              if (id.isEmpty) return null;
+              final exists = state.activeHousemates.any((u) => u.id == id);
+              return exists ? id : null;
+            }(),
             isExpanded: true,
             style: const TextStyle(fontSize: 12, color: HomiesColors.text),
             hint: const Text('— unassigned —', style: TextStyle(fontSize: 12)),
@@ -289,6 +300,45 @@ class _TaskRow extends StatelessWidget {
                     child: const Text('📷 Photo proof'),
                   ),
                 ]),
+              ),
+            if (isMine || isLeaseholder)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: OutlinedButton.icon(
+                  onPressed: () => showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (_) => Padding(
+                      padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        const Text('Attach photo', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                        const SizedBox(height: 10),
+                        FilePickerButton(
+                          value: task.photo,
+                          onChanged: (f) {
+                            state.mutate(() => task.photo = f);
+                            Navigator.pop(context);
+                          },
+                          allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+                          label: 'Choose a photo',
+                        ),
+                        if (task.photo != null)
+                          TextButton(
+                            onPressed: () {
+                              state.mutate(() => task.photo = null);
+                              Navigator.pop(context);
+                            },
+                            child: const Text('Remove photo', style: TextStyle(color: HomiesColors.danger)),
+                          ),
+                      ]),
+                    ),
+                  ),
+                  icon: const Icon(Icons.photo_camera_outlined, size: 14),
+                  label: Text(
+                    task.photo == null ? 'Attach photo' : 'Replace photo',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
               ),
           ]),
         ),
@@ -422,6 +472,185 @@ class _TaskModalState extends State<_TaskModal> {
             ]),
           ]),
         ),
+      ),
+    );
+  }
+}
+
+// ── Leaseholder: availability summary + ask button ──────────────────────────
+
+class _AvailabilitySummary extends StatelessWidget {
+  const _AvailabilitySummary();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final requested = state.property.cleaningAvailabilityRequested;
+    final avail = state.cleaningAvailability;
+    final tenants = state.activeHousemates.where((u) => u.role == 'tenant').toList();
+
+    // Collect unique days that have at least one response
+    final respondedDays = avail.map((a) => a.day).toSet();
+    final allDays = {..._days.where((d) => respondedDays.contains(d))};
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [
+        Expanded(
+          child: Text(
+            'Tenant availability',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+        ),
+        if (!requested)
+          OutlinedButton.icon(
+            onPressed: () => state.mutate(() => state.property.cleaningAvailabilityRequested = true),
+            icon: const Icon(Icons.calendar_today_outlined, size: 14),
+            label: const Text('Ask availability', style: TextStyle(fontSize: 12)),
+          )
+        else
+          OutlinedButton(
+            onPressed: () => state.mutate(() {
+              state.property.cleaningAvailabilityRequested = false;
+              state.cleaningAvailability.clear();
+            }),
+            child: const Text('Close round', style: TextStyle(fontSize: 12)),
+          ),
+      ]),
+      if (requested) ...[
+        const SizedBox(height: 6),
+        if (avail.isEmpty)
+          const Text('Waiting for tenants to respond…',
+              style: TextStyle(color: HomiesColors.textDim, fontSize: 12))
+        else
+          for (final day in allDays) ...[
+            const SizedBox(height: 6),
+            Row(children: [
+              SizedBox(
+                width: 36,
+                child: Text(day, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: HomiesColors.textDim)),
+              ),
+              const SizedBox(width: 6),
+              Wrap(spacing: 4, children: [
+                for (final t in tenants)
+                  if (avail.firstWhereOrNull((a) => a.userId == t.id && a.day == day) case final entry when entry != null)
+                    HomiesChip(
+                      t.name.split(' ').first,
+                      tone: entry.status == 'available' ? ChipTone.ok : ChipTone.danger,
+                    ),
+              ]),
+            ]),
+          ],
+        if (tenants.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            '${avail.map((a) => a.userId).toSet().length} of ${tenants.length} responded',
+            style: const TextStyle(fontSize: 11, color: HomiesColors.textFaint),
+          ),
+        ],
+      ] else
+        const Padding(
+          padding: EdgeInsets.only(top: 4),
+          child: Text('Ask tenants which days work for them before assigning the roster.',
+              style: TextStyle(color: HomiesColors.textDim, fontSize: 12)),
+        ),
+    ]);
+  }
+}
+
+// ── Tenant: mark availability per day ───────────────────────────────────────
+
+class _TenantAvailabilityCard extends StatelessWidget {
+  final String userId;
+  const _TenantAvailabilityCard({required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    if (!state.property.cleaningAvailabilityRequested) return const SizedBox.shrink();
+
+    final myResponses = {
+      for (final a in state.cleaningAvailability.where((a) => a.userId == userId)) a.day: a.status,
+    };
+
+    void setDay(String day, String status) {
+      state.mutate(() {
+        state.cleaningAvailability.removeWhere((a) => a.userId == userId && a.day == day);
+        state.cleaningAvailability.add(CleaningDayAvailability(userId: userId, day: day, status: status));
+      });
+    }
+
+    void clearDay(String day) {
+      state.mutate(() => state.cleaningAvailability.removeWhere((a) => a.userId == userId && a.day == day));
+    }
+
+    return HomiesCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          const Icon(Icons.calendar_today_outlined, size: 16, color: HomiesColors.accent),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text('Availability request', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          ),
+        ]),
+        const SizedBox(height: 2),
+        const Text('Your leaseholder wants to know which days work for cleaning.',
+            style: TextStyle(color: HomiesColors.textDim, fontSize: 12)),
+        const SizedBox(height: 12),
+        for (final day in _days) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(children: [
+              SizedBox(
+                width: 40,
+                child: Text(day, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(width: 8),
+              _DayToggle(
+                label: 'Can do',
+                selected: myResponses[day] == 'available',
+                tone: ChipTone.ok,
+                onTap: () => myResponses[day] == 'available' ? clearDay(day) : setDay(day, 'available'),
+              ),
+              const SizedBox(width: 6),
+              _DayToggle(
+                label: 'N/A',
+                selected: myResponses[day] == 'na',
+                tone: ChipTone.danger,
+                onTap: () => myResponses[day] == 'na' ? clearDay(day) : setDay(day, 'na'),
+              ),
+            ]),
+          ),
+        ],
+      ]),
+    );
+  }
+}
+
+class _DayToggle extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final ChipTone tone;
+  final VoidCallback onTap;
+  const _DayToggle({required this.label, required this.selected, required this.tone, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final (bg, fg) = switch (tone) {
+      ChipTone.ok => (HomiesColors.ok.withValues(alpha: selected ? 0.18 : 0.06), selected ? HomiesColors.ok : HomiesColors.textDim),
+      ChipTone.danger => (HomiesColors.danger.withValues(alpha: selected ? 0.18 : 0.06), selected ? HomiesColors.danger : HomiesColors.textDim),
+      _ => (HomiesColors.surface2, HomiesColors.textDim),
+    };
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(
+          color: bg,
+          border: Border.all(color: selected ? fg : HomiesColors.border),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
       ),
     );
   }

@@ -12,7 +12,6 @@ import '../widgets/lifestyle_fields.dart';
 import '../widgets/ui_kit.dart';
 import 'post_thread.dart';
 
-// Fields a user can choose to share when expressing interest.
 const _shareable = <(String, String)>[
   ('name', 'Name'),
   ('email', 'Email'),
@@ -41,7 +40,6 @@ bool _has(User u, String key) {
 
 String _rid(String prefix) => '$prefix-${Random().nextInt(0xFFFFFF).toRadixString(36)}';
 
-/// Ids of everyone (other than the poster) who has messaged on a post.
 Set<String> _participantsFor(HomiesState s, Listing l) {
   final others = <String>{};
   for (final m in s.postMessages.where((m) => m.listingId == l.id)) {
@@ -52,11 +50,24 @@ Set<String> _participantsFor(HomiesState s, Listing l) {
   return others;
 }
 
-void _openThread(BuildContext context, Listing listing, String otherUserId) {
+void _openThread(BuildContext context, Listing listing, String otherUserId, {String? initiatorId}) {
   Navigator.of(context).push(
-    MaterialPageRoute(builder: (_) => PostThreadScreen(listing: listing, otherUserId: otherUserId)),
+    MaterialPageRoute(builder: (_) => PostThreadScreen(listing: listing, otherUserId: otherUserId, initiatorId: initiatorId)),
   );
 }
+
+String _prefLabel(String? val, Map<String, String> map) => val == null ? '' : (map[val] ?? val);
+
+const _alcoholLabels = {'yes': 'Alcohol OK', 'no': 'No alcohol', 'social': 'Social only'};
+const _smokingLabels = {'yes': 'Smoking OK', 'no': 'No smoking', 'outside': 'Outside only'};
+const _genderLabels = {
+  'any': 'Any gender',
+  'female': 'Female preferred',
+  'male': 'Male preferred',
+  'non-binary': 'Non-binary preferred',
+};
+
+// ─── Screen ──────────────────────────────────────────────────────────────────
 
 class ListingsScreen extends StatefulWidget {
   const ListingsScreen({super.key});
@@ -67,6 +78,45 @@ class ListingsScreen extends StatefulWidget {
 
 class _ListingsScreenState extends State<ListingsScreen> {
   String tab = 'tenant-wanted';
+  final _locationCtrl = TextEditingController();
+
+  // Filter values — null means "no filter applied"
+  String? _genderFilter;
+  String? _smokingFilter;
+  String? _alcoholFilter;
+  bool? _billsFilter; // true = bills included only
+
+  @override
+  void dispose() {
+    _locationCtrl.dispose();
+    super.dispose();
+  }
+
+  int get _activeFilterCount => [
+        _genderFilter,
+        _smokingFilter,
+        _alcoholFilter,
+        if (_billsFilter == true) 'bills',
+      ].whereType<String>().length;
+
+  void _openFilters(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _FilterSheet(
+        genderFilter: _genderFilter,
+        smokingFilter: _smokingFilter,
+        alcoholFilter: _alcoholFilter,
+        billsFilter: _billsFilter,
+        onApply: (g, s, a, b) => setState(() {
+          _genderFilter = g;
+          _smokingFilter = s;
+          _alcoholFilter = a;
+          _billsFilter = b;
+        }),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,14 +124,23 @@ class _ListingsScreenState extends State<ListingsScreen> {
     final cu = state.currentUser!;
     final isLeaseholder = cu.role == 'leaseholder';
 
-    final listings = state.listings.where((l) => l.type == tab && l.status == 'open').toList();
+    final locationQ = _locationCtrl.text.trim().toLowerCase();
+    final listings = state.listings.where((l) {
+      if (l.type != tab || l.status != 'open') return false;
+      if (locationQ.isNotEmpty && !l.suburb.toLowerCase().contains(locationQ)) return false;
+      if (_genderFilter != null && _genderFilter != 'any' && l.genderPref != null && l.genderPref != 'any' && l.genderPref != _genderFilter) return false;
+      if (_smokingFilter != null && l.smokingPref != null && l.smokingPref != _smokingFilter) return false;
+      if (_alcoholFilter != null && l.alcoholPref != null && l.alcoholPref != _alcoholFilter) return false;
+      if (_billsFilter == true && !l.billsIncluded) return false;
+      return true;
+    }).toList();
+
     final inbox = state.listingInterests.where((i) => i.to == cu.id).toList();
     final sent = state.listingInterests.where((i) => i.from == cu.id).toList();
     final inspectionInbox = state.inspections.where((i) => i.to == cu.id).toList();
     final myInspections = state.inspections.where((i) => i.requestedBy == cu.id).toList();
-
-    // Conversations the current user is part of, across all posts.
     final convs = _myConversations(state, cu);
+    final fc = _activeFilterCount;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -90,10 +149,9 @@ class _ListingsScreenState extends State<ListingsScreen> {
           PageHead(
             title: 'Rooms & housemates',
             subtitle: isLeaseholder
-                ? 'Advertise a free room, message people directly and ask for their track record.'
-                : 'Browse rooms and message leaseholders directly.',
-            // Only leaseholders can post a room. Everyone else browses.
-            action: isLeaseholder
+                ? 'Advertise a free room or post that you\'re looking. Message people directly.'
+                : 'Browse available rooms or let others know you\'re looking.',
+            action: tab == 'tenant-wanted' && isLeaseholder
                 ? ElevatedButton(
                     onPressed: () => showModalBottomSheet(
                       context: context,
@@ -105,22 +163,106 @@ class _ListingsScreenState extends State<ListingsScreen> {
                     ),
                     child: const Text('+ List a room'),
                   )
-                : null,
+                : tab == 'room-wanted'
+                    ? ElevatedButton(
+                        onPressed: () => showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          builder: (_) => Padding(
+                            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+                            child: const _ListingModal(type: 'room-wanted'),
+                          ),
+                        ),
+                        child: const Text('+ I\'m looking'),
+                      )
+                    : null,
           ),
-          if (convs.isNotEmpty) ...[
-            _ConversationsCard(conversations: convs),
-            const SizedBox(height: 8),
-          ],
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Segment<String>(
+
+          // Tab switcher + chat icon
+          Row(children: [
+            Segment<String>(
               options: const ['tenant-wanted', 'room-wanted'],
               value: tab,
               labelFor: (t) => t == 'tenant-wanted' ? 'Rooms available' : 'People looking',
               onChanged: (t) => setState(() => tab = t),
+              optionPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             ),
-          ),
+            const Spacer(),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                IconButton(
+                  tooltip: 'Messages',
+                  icon: const Icon(Icons.chat_bubble_outline),
+                  onPressed: () => _openConversationsPage(context, convs, state, cu),
+                ),
+                if (convs.isNotEmpty)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Container(
+                      width: 16,
+                      height: 16,
+                      decoration: const BoxDecoration(
+                          color: HomiesColors.accent, shape: BoxShape.circle),
+                      child: Center(
+                        child: Text('${convs.length}',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ]),
           const SizedBox(height: 12),
+
+          // Search + filter row
+          Row(children: [
+            Expanded(
+              child: TextField(
+                controller: _locationCtrl,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  hintText: 'Search by suburb…',
+                  prefixIcon: Icon(Icons.location_on_outlined, size: 18),
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => _openFilters(context),
+                  icon: const Icon(Icons.tune, size: 16),
+                  label: const Text('Filters'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                ),
+                if (fc > 0)
+                  Positioned(
+                    top: -4,
+                    right: -4,
+                    child: Container(
+                      width: 18,
+                      height: 18,
+                      decoration: const BoxDecoration(color: HomiesColors.accent, shape: BoxShape.circle),
+                      child: Center(
+                        child: Text('$fc', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ]),
+          const SizedBox(height: 12),
+
           if (listings.isEmpty)
             EmptyState(
               title: 'Nothing here yet',
@@ -132,6 +274,10 @@ class _ListingsScreenState extends State<ListingsScreen> {
               mine: l.by == cu.id,
               alreadySent: sent.any((i) => i.listingId == l.id),
             ),
+
+          // Incoming leaseholder-to-leaseholder performance requests
+          ..._incomingPerfRequests(state, cu),
+
           if (inbox.isNotEmpty) ...[
             const SizedBox(height: 8),
             const Text('Interest in your listings', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
@@ -152,86 +298,147 @@ class _ListingsScreenState extends State<ListingsScreen> {
     );
   }
 
-  List<({Listing listing, String otherId, PostMessage last})> _myConversations(HomiesState state, User cu) {
-    final out = <({Listing listing, String otherId, PostMessage last})>[];
+  List<({Listing listing, String otherId, String initiatorId, PostMessage last})> _myConversations(HomiesState state, User cu) {
+    final out = <({Listing listing, String otherId, String initiatorId, PostMessage last})>[];
+    final seen = <String>{};
     for (final l in state.listings) {
-      final isPoster = l.by == cu.id;
-      // The set of "other" participants relevant to this user on this post.
-      final others = <String>{};
+      final partners = <String>{};
       for (final m in state.postMessages.where((m) => m.listingId == l.id)) {
-        final involvesMe = m.from == cu.id || m.to == cu.id;
-        if (isPoster) {
-          if (m.from != cu.id) others.add(m.from);
-          if (m.to != cu.id) others.add(m.to);
-        } else if (involvesMe) {
-          others.add(l.by);
-        }
+        if (m.from == cu.id) partners.add(m.to);
+        if (m.to == cu.id) partners.add(m.from);
       }
-      for (final other in others) {
-        final msgs = threadMessages(state, l.id, l.by, isPoster ? other : cu.id);
+      for (final partner in partners) {
+        final key = '${l.id}:$partner';
+        if (seen.contains(key)) continue;
+        seen.add(key);
+        final msgs = threadMessages(state, l.id, cu.id, partner);
         if (msgs.isEmpty) continue;
-        // For a non-poster, the conversation partner shown is the poster.
-        final partner = isPoster ? other : l.by;
-        out.add((listing: l, otherId: partner, last: msgs.last));
+        out.add((listing: l, otherId: partner, initiatorId: cu.id, last: msgs.last));
       }
     }
     out.sort((a, b) => b.last.at.compareTo(a.last.at));
     return out;
   }
-}
 
-class _ConversationsCard extends StatelessWidget {
-  final List<({Listing listing, String otherId, PostMessage last})> conversations;
-  const _ConversationsCard({required this.conversations});
+  void _openConversationsPage(
+    BuildContext context,
+    List<({Listing listing, String otherId, String initiatorId, PostMessage last})> convs,
+    HomiesState state,
+    User cu,
+  ) {
+    final leaseholderConvs = convs.where((c) => state.findUser(c.otherId)?.role == 'leaseholder').toList();
+    final otherConvs = convs.where((c) => state.findUser(c.otherId)?.role != 'leaseholder').toList();
 
-  @override
-  Widget build(BuildContext context) {
-    final state = HomiesScope.of(context);
-    final cu = state.currentUser!;
-    return HomiesCard(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [
-          const Icon(Icons.forum_outlined, size: 18, color: HomiesColors.accent),
-          const SizedBox(width: 8),
-          Text('Your conversations (${conversations.length})',
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-        ]),
-        const SizedBox(height: 4),
-        for (final c in conversations) _convTile(context, state, cu, c),
-      ]),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('Messages')),
+          body: convs.isEmpty
+              ? const Center(
+                  child: Text('No conversations yet.',
+                      style: TextStyle(color: HomiesColors.textDim)),
+                )
+              : ListView(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  children: [
+                    if (leaseholderConvs.isNotEmpty) ...[
+                      _convSectionLabel('Leaseholders'),
+                      for (final c in leaseholderConvs) ...[
+                        _convTile(context, state, cu, c),
+                        const Divider(height: 1, indent: 68),
+                      ],
+                    ],
+                    if (otherConvs.isNotEmpty) ...[
+                      if (leaseholderConvs.isNotEmpty) const SizedBox(height: 4),
+                      _convSectionLabel('Tenants & applicants'),
+                      for (final c in otherConvs) ...[
+                        _convTile(context, state, cu, c),
+                        const Divider(height: 1, indent: 68),
+                      ],
+                    ],
+                  ],
+                ),
+        ),
+      ),
     );
   }
 
-  Widget _convTile(BuildContext context, HomiesState state, User cu, ({Listing listing, String otherId, PostMessage last}) c) {
+  // Returns banner cards for every unanswered perf-request addressed to cu.
+  List<Widget> _incomingPerfRequests(HomiesState state, User cu) {
+    final out = <Widget>[];
+    for (final l in state.listings) {
+      final requests = state.postMessages
+          .where((m) => m.listingId == l.id && m.to == cu.id && m.kind == 'perf-request')
+          .toList();
+      for (final req in requests) {
+        final thread = threadMessages(state, l.id, req.from, cu.id);
+        final answered = thread.any((m) => m.kind == 'perf-share' && m.from == cu.id && m.at.compareTo(req.at) > 0);
+        if (answered) continue;
+        final requester = state.findUser(req.from);
+        out.add(_PerfRequestBanner(
+          requester: requester,
+          listing: l,
+          onOpen: () => _openThread(context, l, cu.id, initiatorId: req.from),
+        ));
+      }
+    }
+    if (out.isEmpty) return [];
+    return [
+      const SizedBox(height: 8),
+      const Text('Performance requests', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+      ...out,
+    ];
+  }
+
+  Widget _convSectionLabel(String label) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+        child: Text(label.toUpperCase(),
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: HomiesColors.textFaint, letterSpacing: 0.8)),
+      );
+
+  Widget _convTile(
+    BuildContext context,
+    HomiesState state,
+    User cu,
+    ({Listing listing, String otherId, String initiatorId, PostMessage last}) c,
+  ) {
     final other = state.findUser(c.otherId);
-    final isPoster = c.listing.by == cu.id;
-    final preview = c.last.kind == 'perf-share'
-        ? '📋 Shared a performance reference'
-        : c.last.kind == 'perf-request'
-            ? '🔖 Performance reference requested'
-            : c.last.text;
+    final preview = switch (c.last.kind) {
+      'perf-share' => '📋 Shared a performance reference',
+      'inspection-invite' => '📅 Inspection invited',
+      'inspection-confirm' => '✅ Inspection confirmed',
+      'perf-request' => '🔖 Performance reference requested',
+      _ => c.last.text,
+    };
+    final isL2L = c.initiatorId != c.listing.by;
     return InkWell(
       borderRadius: BorderRadius.circular(8),
-      onTap: () => _openThread(context, c.listing, isPoster ? c.otherId : cu.id),
+      onTap: () => _openThread(
+        context, c.listing, c.otherId,
+        initiatorId: isL2L ? c.initiatorId : null,
+      ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(children: [
           Avatar(user: other),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 Expanded(
                   child: Text(other?.name ?? '—',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis),
                 ),
-                Text(fmtDateShort(c.last.at), style: const TextStyle(fontSize: 11, color: HomiesColors.textFaint)),
+                Text(fmtDateShort(c.last.at),
+                    style: const TextStyle(fontSize: 11, color: HomiesColors.textFaint)),
               ]),
               Text(c.listing.title,
-                  style: const TextStyle(fontSize: 11, color: HomiesColors.textFaint), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  style: const TextStyle(fontSize: 11, color: HomiesColors.textFaint),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
               Text(preview,
-                  style: const TextStyle(fontSize: 12, color: HomiesColors.textDim), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  style: const TextStyle(fontSize: 12, color: HomiesColors.textDim),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
             ]),
           ),
           const Icon(Icons.chevron_right, size: 18, color: HomiesColors.textFaint),
@@ -240,6 +447,114 @@ class _ConversationsCard extends StatelessWidget {
     );
   }
 }
+
+// ─── Filter sheet ─────────────────────────────────────────────────────────────
+
+class _FilterSheet extends StatefulWidget {
+  final String? genderFilter;
+  final String? smokingFilter;
+  final String? alcoholFilter;
+  final bool? billsFilter;
+  final void Function(String? gender, String? smoking, String? alcohol, bool? bills) onApply;
+
+  const _FilterSheet({
+    required this.genderFilter,
+    required this.smokingFilter,
+    required this.alcoholFilter,
+    required this.billsFilter,
+    required this.onApply,
+  });
+
+  @override
+  State<_FilterSheet> createState() => _FilterSheetState();
+}
+
+class _FilterSheetState extends State<_FilterSheet> {
+  String? _gender;
+  String? _smoking;
+  String? _alcohol;
+  bool? _bills;
+
+  @override
+  void initState() {
+    super.initState();
+    _gender = widget.genderFilter;
+    _smoking = widget.smokingFilter;
+    _alcohol = widget.alcoholFilter;
+    _bills = widget.billsFilter;
+  }
+
+  void _reset() => setState(() {
+        _gender = null;
+        _smoking = null;
+        _alcohol = null;
+        _bills = null;
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            const Text('Filters', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+            const Spacer(),
+            TextButton(onPressed: _reset, child: const Text('Reset all')),
+          ]),
+          const SizedBox(height: 16),
+
+          const FieldLabel('Gender preference'),
+          const SizedBox(height: 6),
+          _PrefRow(
+            options: _genderLabels,
+            value: _gender,
+            onChanged: (v) => setState(() => _gender = v),
+          ),
+          const SizedBox(height: 14),
+
+          const FieldLabel('Smoking'),
+          const SizedBox(height: 6),
+          _PrefRow(
+            options: _smokingLabels,
+            value: _smoking,
+            onChanged: (v) => setState(() => _smoking = v),
+          ),
+          const SizedBox(height: 14),
+
+          const FieldLabel('Alcohol'),
+          const SizedBox(height: 6),
+          _PrefRow(
+            options: _alcoholLabels,
+            value: _alcohol,
+            onChanged: (v) => setState(() => _alcohol = v),
+          ),
+          const SizedBox(height: 14),
+
+          const FieldLabel('Bills'),
+          const SizedBox(height: 6),
+          _PrefRow(
+            options: const {'true': 'Bills included'},
+            value: _bills == true ? 'true' : null,
+            onChanged: (v) => setState(() => _bills = v == 'true' ? true : null),
+          ),
+          const SizedBox(height: 20),
+
+          ElevatedButton(
+            onPressed: () {
+              widget.onApply(_gender, _smoking, _alcohol, _bills);
+              Navigator.pop(context);
+            },
+            child: const Text('Apply filters'),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ─── Post card ────────────────────────────────────────────────────────────────
 
 class _PostCard extends StatelessWidget {
   final Listing listing;
@@ -255,6 +570,16 @@ class _PostCard extends StatelessWidget {
     final isRoom = listing.type == 'tenant-wanted';
     final participants = _participantsFor(state, listing);
 
+    final prefChips = <String>[
+      if (listing.billsIncluded) 'Bills incl.',
+      if (listing.hasPool) 'Pool',
+      if (listing.hasParking) 'Parking',
+      if (listing.alcoholPref != null) _prefLabel(listing.alcoholPref, _alcoholLabels),
+      if (listing.smokingPref != null) _prefLabel(listing.smokingPref, _smokingLabels),
+      if (listing.genderPref != null && listing.genderPref != 'any')
+        _prefLabel(listing.genderPref, _genderLabels),
+    ].where((s) => s.isNotEmpty).toList();
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
       decoration: BoxDecoration(
@@ -263,7 +588,6 @@ class _PostCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        // Coloured type strip.
         Container(
           height: 4,
           decoration: BoxDecoration(
@@ -282,7 +606,8 @@ class _PostCard extends StatelessWidget {
                   Row(children: [
                     Flexible(
                       child: Text(by?.name ?? '—',
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14), overflow: TextOverflow.ellipsis),
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                          overflow: TextOverflow.ellipsis),
                     ),
                     const SizedBox(width: 6),
                     HomiesChip(
@@ -294,23 +619,29 @@ class _PostCard extends StatelessWidget {
                       style: const TextStyle(color: HomiesColors.textDim, fontSize: 12)),
                 ]),
               ),
-              HomiesChip(isRoom ? 'Room available' : 'Looking', tone: isRoom ? ChipTone.accent : ChipTone.info),
             ]),
             const SizedBox(height: 12),
-            Text(listing.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, height: 1.25)),
+            Text(listing.title,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, height: 1.25)),
             const SizedBox(height: 8),
             Wrap(spacing: 6, runSpacing: 4, children: [
-              if (isRoom && listing.rent != null) HomiesChip('${fmtAUD(listing.rent)}/wk', tone: ChipTone.accent),
-              if (!isRoom && listing.budget != null) HomiesChip('Budget ${fmtAUD(listing.budget)}/wk', tone: ChipTone.accent),
+              if (isRoom && listing.rent != null)
+                HomiesChip('${fmtAUD(listing.rent)}/wk', tone: ChipTone.accent),
+              if (!isRoom && listing.budget != null)
+                HomiesChip('Budget ${fmtAUD(listing.budget)}/wk', tone: ChipTone.accent),
               if (listing.availableFrom != null && listing.availableFrom!.isNotEmpty)
                 HomiesChip('From ${fmtDate(listing.availableFrom)}'),
+              for (final c in prefChips) HomiesChip(c),
             ]),
             if (listing.description.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
-                child: Text(listing.description, style: const TextStyle(fontSize: 13, height: 1.4, color: HomiesColors.text)),
+                child: Text(listing.description,
+                    style: const TextStyle(fontSize: 13, height: 1.4, color: HomiesColors.text)),
               ),
-            const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1, color: HomiesColors.border)),
+            const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Divider(height: 1, color: HomiesColors.border)),
             if (mine)
               _ownerFooter(context, state, participants)
             else
@@ -326,7 +657,8 @@ class _PostCard extends StatelessWidget {
       return const Row(children: [
         Icon(Icons.forum_outlined, size: 16, color: HomiesColors.textFaint),
         SizedBox(width: 6),
-        Text('Your listing · no messages yet', style: TextStyle(color: HomiesColors.textFaint, fontSize: 12)),
+        Text('Your listing · no messages yet',
+            style: TextStyle(color: HomiesColors.textFaint, fontSize: 12)),
       ]);
     }
     final people = participants.map((id) => state.findUser(id)).whereType<User>().toList();
@@ -334,7 +666,8 @@ class _PostCard extends StatelessWidget {
       AvatarStack(users: people),
       const SizedBox(width: 10),
       Expanded(
-        child: Text('${participants.length} ${participants.length == 1 ? 'person' : 'people'} messaged you',
+        child: Text(
+            '${participants.length} ${participants.length == 1 ? 'person' : 'people'} messaged you',
             style: const TextStyle(fontSize: 12, color: HomiesColors.textDim)),
       ),
       ElevatedButton(
@@ -377,10 +710,48 @@ class _PostCard extends StatelessWidget {
 
   Widget _visitorFooter(BuildContext context, User cu) {
     final state = HomiesScope.of(context);
-    final hasThread = state.postMessages.any((m) => m.listingId == listing.id && (m.from == cu.id || m.to == cu.id));
-    final bookedInspection = state.inspections.any((i) =>
-        i.listingId == listing.id && i.requestedBy == cu.id && i.status != 'declined');
+    final isLooking = listing.type == 'room-wanted';
+    final hasThread =
+        state.postMessages.any((m) => m.listingId == listing.id && (m.from == cu.id || m.to == cu.id));
+    final sentInspection = state.inspections.any(
+        (i) => i.listingId == listing.id && i.requestedBy == cu.id && i.status != 'declined');
+
+    // L2L: leaseholder viewing a tenant's listing that has a leaseholder reference
+    final by = state.findUser(listing.by);
+    final lhRefId = cu.role == 'leaseholder' && by?.role == 'tenant' ? by?.leaseholderUserId : null;
+    final lhRef = lhRefId != null ? state.findUser(lhRefId) : null;
+    final alreadyRequested = lhRefId != null &&
+        state.postMessages.any((m) =>
+            m.listingId == listing.id && m.from == cu.id && m.to == lhRefId && m.kind == 'perf-request');
+
     return Column(children: [
+      if (lhRef != null) ...[
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: alreadyRequested
+                ? null
+                : () {
+                    final msg = PostMessage(
+                      id: _rid('pm'),
+                      listingId: listing.id,
+                      from: cu.id,
+                      to: lhRefId!,
+                      text: '${cu.name.split(' ').first} asked about one of your tenants\' track record.',
+                      at: DateTime.now().toIso8601String(),
+                      kind: 'perf-request',
+                    );
+                    state.mutate(() => state.postMessages.add(msg));
+                    _openThread(context, listing, lhRefId, initiatorId: cu.id);
+                  },
+            icon: const Icon(Icons.workspace_premium_outlined, size: 16),
+            label: Text(alreadyRequested
+                ? 'Request sent to ${lhRef.name.split(' ').first}'
+                : 'Request performance from ${lhRef.name.split(' ').first}'),
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
       Row(children: [
         Expanded(
           child: OutlinedButton(
@@ -390,7 +761,8 @@ class _PostCard extends StatelessWidget {
                       context: context,
                       isScrollControlled: true,
                       builder: (_) => Padding(
-                        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+                        padding:
+                            EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
                         child: _ShareInfoModal(listing: listing),
                       ),
                     ),
@@ -410,23 +782,28 @@ class _PostCard extends StatelessWidget {
       SizedBox(
         width: double.infinity,
         child: OutlinedButton.icon(
-          onPressed: bookedInspection
+          onPressed: sentInspection
               ? null
               : () => showModalBottomSheet(
                     context: context,
                     isScrollControlled: true,
                     builder: (_) => Padding(
-                      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-                      child: _InspectionModal(listing: listing),
+                      padding:
+                          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+                      child: _InspectionModal(listing: listing, isInvite: isLooking),
                     ),
                   ),
-          icon: const Icon(Icons.event_available_outlined, size: 16),
-          label: Text(bookedInspection ? 'Inspection requested' : 'Book an inspection'),
+          icon: Icon(isLooking ? Icons.person_add_outlined : Icons.event_available_outlined, size: 16),
+          label: Text(sentInspection
+              ? (isLooking ? 'Invite sent' : 'Inspection requested')
+              : (isLooking ? 'Invite for inspection' : 'Book an inspection')),
         ),
       ),
     ]);
   }
 }
+
+// ─── Interest card ────────────────────────────────────────────────────────────
 
 class _InterestCard extends StatelessWidget {
   final ListingInterest interest;
@@ -449,14 +826,19 @@ class _InterestCard extends StatelessWidget {
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Re: ${listing?.title ?? 'listing'}', style: const TextStyle(fontWeight: FontWeight.w600)),
-              Padding(padding: const EdgeInsets.only(top: 4), child: HomiesChip(interest.status, tone: statusTone)),
+              Text('Re: ${listing?.title ?? 'listing'}',
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: HomiesChip(interest.status, tone: statusTone)),
             ]),
           ),
           Avatar.sm(from),
         ]),
         if (interest.message.isNotEmpty)
-          Padding(padding: const EdgeInsets.only(top: 8), child: Text('“${interest.message}”', style: const TextStyle(fontSize: 13))),
+          Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text('"${interest.message}"', style: const TextStyle(fontSize: 13))),
         Container(
           margin: const EdgeInsets.only(top: 10),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -467,7 +849,11 @@ class _InterestCard extends StatelessWidget {
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             const Text('SHARED DETAILS',
-                style: TextStyle(fontSize: 11, color: HomiesColors.textDim, letterSpacing: 0.5, fontWeight: FontWeight.w600)),
+                style: TextStyle(
+                    fontSize: 11,
+                    color: HomiesColors.textDim,
+                    letterSpacing: 0.5,
+                    fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
             for (final f in _shareable)
               if ((interest.sharedFields[f.$1] ?? '').isNotEmpty)
@@ -476,7 +862,9 @@ class _InterestCard extends StatelessWidget {
                   child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                     Text(f.$2, style: const TextStyle(fontSize: 12, color: HomiesColors.textDim)),
                     Text(
-                      f.$1 == 'moveInDate' ? fmtDate(interest.sharedFields[f.$1]) : interest.sharedFields[f.$1]!,
+                      f.$1 == 'moveInDate'
+                          ? fmtDate(interest.sharedFields[f.$1])
+                          : interest.sharedFields[f.$1]!,
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                     ),
                   ]),
@@ -494,7 +882,11 @@ class _InterestCard extends StatelessWidget {
             ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               const Text('LIFESTYLE & EMERGENCY',
-                  style: TextStyle(fontSize: 11, color: HomiesColors.textDim, letterSpacing: 0.5, fontWeight: FontWeight.w600)),
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: HomiesColors.textDim,
+                      letterSpacing: 0.5,
+                      fontWeight: FontWeight.w600)),
               const SizedBox(height: 6),
               LifestyleSummary(lifestyle: interest.lifestyle, emergency: interest.emergency),
             ]),
@@ -519,6 +911,8 @@ class _InterestCard extends StatelessWidget {
   }
 }
 
+// ─── Post modal ───────────────────────────────────────────────────────────────
+
 class _ListingModal extends StatefulWidget {
   final String type;
   const _ListingModal({required this.type});
@@ -530,9 +924,15 @@ class _ListingModal extends StatefulWidget {
 class _ListingModalState extends State<_ListingModal> {
   final titleCtrl = TextEditingController();
   final suburbCtrl = TextEditingController();
-  final amountCtrl = TextEditingController();
+  final rentCtrl = TextEditingController();
   final descCtrl = TextEditingController();
   DateTime? availableFrom;
+  bool billsIncluded = false;
+  bool hasPool = false;
+  bool hasParking = false;
+  String? alcoholPref;
+  String? smokingPref;
+  String? genderPref;
 
   bool get _isRoom => widget.type == 'tenant-wanted';
 
@@ -540,7 +940,7 @@ class _ListingModalState extends State<_ListingModal> {
   void dispose() {
     titleCtrl.dispose();
     suburbCtrl.dispose();
-    amountCtrl.dispose();
+    rentCtrl.dispose();
     descCtrl.dispose();
     super.dispose();
   }
@@ -549,79 +949,212 @@ class _ListingModalState extends State<_ListingModal> {
   Widget build(BuildContext context) {
     final state = HomiesScope.of(context);
     final canSave = titleCtrl.text.trim().isNotEmpty && suburbCtrl.text.trim().isNotEmpty;
+
     return SafeArea(
       top: false,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: SingleChildScrollView(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-            Text(_isRoom ? 'List a room' : 'Post what you’re looking for',
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 12),
-            const FieldLabel('Title'),
-            TextField(
-              controller: titleCtrl,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                hintText: _isRoom ? 'Sunny double room in 4-bed house' : 'Quiet professional after a room near the city',
-              ),
-            ),
-            const SizedBox(height: 10),
-            const FieldLabel('Suburb'),
-            TextField(controller: suburbCtrl, onChanged: (_) => setState(() {}), decoration: const InputDecoration(hintText: 'Marrickville')),
-            const SizedBox(height: 10),
-            FieldLabel(_isRoom ? 'Rent (\$/week)' : 'Budget (\$/week)'),
-            TextField(controller: amountCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(hintText: '0')),
-            const SizedBox(height: 10),
-            FieldLabel(_isRoom ? 'Available from' : 'Move in by'),
-            OutlinedButton(
-              onPressed: () async {
-                final d = await pickDate(context, initial: availableFrom);
-                if (d != null) setState(() => availableFrom = d);
-              },
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(availableFrom == null ? 'Pick a date' : fmtDate(toIso(availableFrom))),
-              ),
-            ),
-            const SizedBox(height: 10),
-            const FieldLabel('Description'),
-            TextField(controller: descCtrl, maxLines: 3, decoration: const InputDecoration(hintText: 'A bit about the place / yourself…')),
-            const SizedBox(height: 14),
-            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: !canSave
-                    ? null
-                    : () {
-                        final amount = double.tryParse(amountCtrl.text.trim());
-                        state.mutate(() => state.listings.insert(
-                              0,
-                              Listing(
-                                id: _rid('lst'),
-                                type: widget.type,
-                                by: state.currentUser!.id,
-                                title: titleCtrl.text.trim(),
-                                suburb: suburbCtrl.text.trim(),
-                                rent: _isRoom ? amount : null,
-                                budget: _isRoom ? null : amount,
-                                availableFrom: toIso(availableFrom),
-                                description: descCtrl.text.trim(),
-                                createdAt: todayIso(),
-                              ),
-                            ));
-                        Navigator.pop(context);
-                      },
-                child: const Text('Post listing'),
-              ),
-            ]),
-          ]),
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _isRoom ? 'List a room' : "Post what you're looking for",
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 12),
+
+                const FieldLabel('Title'),
+                TextField(
+                  controller: titleCtrl,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: _isRoom
+                        ? 'Sunny double room in 4-bed house'
+                        : 'Quiet professional after a room near the city',
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                const FieldLabel('Suburb / location'),
+                TextField(
+                  controller: suburbCtrl,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(hintText: 'Marrickville'),
+                ),
+                const SizedBox(height: 10),
+
+                FieldLabel(_isRoom ? 'Rent (\$/week)' : 'Budget (\$/week)'),
+                TextField(
+                  controller: rentCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(hintText: '0'),
+                ),
+                const SizedBox(height: 10),
+
+                FieldLabel(_isRoom ? 'Available from' : 'Move in by'),
+                OutlinedButton(
+                  onPressed: () async {
+                    final d = await pickDate(context, initial: availableFrom);
+                    if (d != null) setState(() => availableFrom = d);
+                  },
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(availableFrom == null
+                        ? 'Pick a date'
+                        : fmtDate(toIso(availableFrom))),
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                const FieldLabel('Description'),
+                TextField(
+                  controller: descCtrl,
+                  maxLines: 3,
+                  decoration:
+                      const InputDecoration(hintText: 'A bit about the place / yourself…'),
+                ),
+
+                if (_isRoom) ...[
+                  const SizedBox(height: 14),
+                  const Text('Property features',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Bills included in rent', style: TextStyle(fontSize: 14)),
+                    value: billsIncluded,
+                    onChanged: (v) => setState(() => billsIncluded = v),
+                  ),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Swimming pool', style: TextStyle(fontSize: 14)),
+                    value: hasPool,
+                    onChanged: (v) => setState(() => hasPool = v),
+                  ),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Parking / garage', style: TextStyle(fontSize: 14)),
+                    value: hasParking,
+                    onChanged: (v) => setState(() => hasParking = v),
+                  ),
+                ],
+
+                const SizedBox(height: 14),
+                const Text('Lifestyle preferences',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 10),
+
+                const FieldLabel('Alcohol'),
+                _PrefRow(
+                  options: _alcoholLabels,
+                  value: alcoholPref,
+                  onChanged: (v) => setState(() => alcoholPref = v),
+                ),
+                const SizedBox(height: 10),
+
+                const FieldLabel('Smoking'),
+                _PrefRow(
+                  options: _smokingLabels,
+                  value: smokingPref,
+                  onChanged: (v) => setState(() => smokingPref = v),
+                ),
+                const SizedBox(height: 10),
+
+                const FieldLabel('Gender preference'),
+                _PrefRow(
+                  options: _genderLabels,
+                  value: genderPref,
+                  onChanged: (v) => setState(() => genderPref = v),
+                ),
+                const SizedBox(height: 20),
+
+                Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: !canSave
+                        ? null
+                        : () {
+                            final amount = double.tryParse(rentCtrl.text.trim());
+                            state.mutate(() => state.listings.insert(
+                                  0,
+                                  Listing(
+                                    id: _rid('lst'),
+                                    type: widget.type,
+                                    by: state.currentUser!.id,
+                                    title: titleCtrl.text.trim(),
+                                    suburb: suburbCtrl.text.trim(),
+                                    rent: _isRoom ? amount : null,
+                                    budget: _isRoom ? null : amount,
+                                    availableFrom: toIso(availableFrom),
+                                    description: descCtrl.text.trim(),
+                                    createdAt: todayIso(),
+                                    billsIncluded: _isRoom ? billsIncluded : false,
+                                    hasPool: _isRoom ? hasPool : false,
+                                    hasParking: _isRoom ? hasParking : false,
+                                    alcoholPref: alcoholPref,
+                                    smokingPref: smokingPref,
+                                    genderPref: genderPref,
+                                  ),
+                                ));
+                            Navigator.pop(context);
+                          },
+                    child: const Text('Post listing'),
+                  ),
+                ]),
+              ]),
         ),
       ),
     );
   }
 }
+
+// ─── Pref chip row ────────────────────────────────────────────────────────────
+
+class _PrefRow extends StatelessWidget {
+  final Map<String, String> options;
+  final String? value;
+  final void Function(String?) onChanged;
+  const _PrefRow({required this.options, required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: options.entries.map((e) {
+        final selected = value == e.key;
+        return GestureDetector(
+          onTap: () => onChanged(selected ? null : e.key),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: selected ? HomiesColors.accent : HomiesColors.surface2,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: selected ? HomiesColors.accent : HomiesColors.border),
+            ),
+            child: Text(
+              e.value,
+              style: TextStyle(
+                fontSize: 13,
+                color: selected ? Colors.white : HomiesColors.text,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+// ─── Share info modal ─────────────────────────────────────────────────────────
 
 class _ShareInfoModal extends StatefulWidget {
   final Listing listing;
@@ -643,7 +1176,7 @@ class _ShareInfoModalState extends State<_ShareInfoModal> {
     _init = true;
     final cu = HomiesScope.of(context).currentUser!;
     for (final f in _shareable) {
-      picked[f.$1] = _has(cu, f.$1); // pre-tick fields that have a value
+      picked[f.$1] = _has(cu, f.$1);
     }
   }
 
@@ -664,99 +1197,119 @@ class _ShareInfoModalState extends State<_ShareInfoModal> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: SingleChildScrollView(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-            const Text('Apply for this room', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-            const Text('Applying shares your lifestyle answers and emergency contact with the leaseholder, plus the contact details you tick below.',
-                style: TextStyle(color: HomiesColors.textDim, fontSize: 12)),
-            const SizedBox(height: 10),
-            const FieldLabel('Share these details'),
-            for (final f in _shareable)
-              CheckboxListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                value: picked[f.$1] ?? false,
-                onChanged: _has(cu, f.$1) ? (v) => setState(() => picked[f.$1] = v ?? false) : null,
-                title: Text(
-                  _has(cu, f.$1) ? f.$2 : '${f.$2} (not set)',
-                  style: TextStyle(fontSize: 14, color: _has(cu, f.$1) ? HomiesColors.text : HomiesColors.textFaint),
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Apply for this room',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+                const Text(
+                  'Applying shares your lifestyle answers and emergency contact with the leaseholder, plus the contact details you tick below.',
+                  style: TextStyle(color: HomiesColors.textDim, fontSize: 12),
                 ),
-              ),
-            const SizedBox(height: 8),
-            if (cu.profileComplete) ...[
-              const FieldLabel('Also shared with your application'),
-              HomiesCard(
-                color: HomiesColors.surface2,
-                child: LifestyleSummary(lifestyle: cu.lifestyle, emergency: cu.emergency),
-              ),
-            ] else
-              HomiesCard(
-                color: HomiesColors.surface2,
-                borderColor: HomiesColors.warnSoft,
-                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  const Text('Complete your profile to apply', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                  const SizedBox(height: 2),
-                  const Text('Applicants share their lifestyle answers and an emergency contact with the leaseholder.',
-                      style: TextStyle(color: HomiesColors.textDim, fontSize: 12)),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        context.go('/app/profile');
-                      },
-                      child: const Text('Go to profile'),
+                const SizedBox(height: 10),
+                const FieldLabel('Share these details'),
+                for (final f in _shareable)
+                  CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    value: picked[f.$1] ?? false,
+                    onChanged:
+                        _has(cu, f.$1) ? (v) => setState(() => picked[f.$1] = v ?? false) : null,
+                    title: Text(
+                      _has(cu, f.$1) ? f.$2 : '${f.$2} (not set)',
+                      style: TextStyle(
+                          fontSize: 14,
+                          color: _has(cu, f.$1) ? HomiesColors.text : HomiesColors.textFaint),
                     ),
                   ),
+                const SizedBox(height: 8),
+                if (cu.profileComplete) ...[
+                  const FieldLabel('Also shared with your application'),
+                  HomiesCard(
+                    color: HomiesColors.surface2,
+                    child: LifestyleSummary(lifestyle: cu.lifestyle, emergency: cu.emergency),
+                  ),
+                ] else
+                  HomiesCard(
+                    color: HomiesColors.surface2,
+                    borderColor: HomiesColors.warnSoft,
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      const Text('Complete your profile to apply',
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Applicants share their lifestyle answers and an emergency contact with the leaseholder.',
+                        style: TextStyle(color: HomiesColors.textDim, fontSize: 12),
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            context.go('/app/profile');
+                          },
+                          child: const Text('Go to profile'),
+                        ),
+                      ),
+                    ]),
+                  ),
+                const SizedBox(height: 6),
+                const FieldLabel('Message (optional)'),
+                TextField(
+                    controller: msgCtrl,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                        hintText: "Hi! I'm interested — a bit about me…")),
+                const SizedBox(height: 14),
+                Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: !anyPicked || !cu.profileComplete
+                        ? null
+                        : () {
+                            final shared = <String, String>{};
+                            for (final f in _shareable) {
+                              if ((picked[f.$1] ?? false) && _has(cu, f.$1)) {
+                                shared[f.$1] = _userField(cu, f.$1)!;
+                              }
+                            }
+                            state.mutate(() => state.listingInterests.insert(
+                                  0,
+                                  ListingInterest(
+                                    id: _rid('int'),
+                                    listingId: widget.listing.id,
+                                    from: cu.id,
+                                    to: widget.listing.by,
+                                    message: msgCtrl.text.trim(),
+                                    sharedFields: shared,
+                                    lifestyle: cu.lifestyle,
+                                    emergency: cu.emergency,
+                                    createdAt: todayIso(),
+                                  ),
+                                ));
+                            Navigator.pop(context);
+                          },
+                    child: const Text('Send application'),
+                  ),
                 ]),
-              ),
-            const SizedBox(height: 6),
-            const FieldLabel('Message (optional)'),
-            TextField(controller: msgCtrl, maxLines: 3, decoration: const InputDecoration(hintText: 'Hi! I’m interested — a bit about me…')),
-            const SizedBox(height: 14),
-            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: !anyPicked || !cu.profileComplete
-                    ? null
-                    : () {
-                        final shared = <String, String>{};
-                        for (final f in _shareable) {
-                          if ((picked[f.$1] ?? false) && _has(cu, f.$1)) {
-                            shared[f.$1] = _userField(cu, f.$1)!;
-                          }
-                        }
-                        state.mutate(() => state.listingInterests.insert(
-                              0,
-                              ListingInterest(
-                                id: _rid('int'),
-                                listingId: widget.listing.id,
-                                from: cu.id,
-                                to: widget.listing.by,
-                                message: msgCtrl.text.trim(),
-                                sharedFields: shared,
-                                lifestyle: cu.lifestyle,
-                                emergency: cu.emergency,
-                                createdAt: todayIso(),
-                              ),
-                            ));
-                        Navigator.pop(context);
-                      },
-                child: const Text('Send application'),
-              ),
-            ]),
-          ]),
+              ]),
         ),
       ),
     );
   }
 }
 
+// ─── Inspection modal ─────────────────────────────────────────────────────────
+
 class _InspectionModal extends StatefulWidget {
   final Listing listing;
-  const _InspectionModal({required this.listing});
+  final bool isInvite;
+  const _InspectionModal({required this.listing, this.isInvite = false});
 
   @override
   State<_InspectionModal> createState() => _InspectionModalState();
@@ -784,64 +1337,84 @@ class _InspectionModalState extends State<_InspectionModal> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: SingleChildScrollView(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-            const Text('Book an inspection', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-            Text('Request a time to view ${widget.listing.title}. The leaseholder confirms or suggests another time.',
-                style: const TextStyle(color: HomiesColors.textDim, fontSize: 12)),
-            const SizedBox(height: 12),
-            const FieldLabel('Preferred date'),
-            OutlinedButton(
-              onPressed: () async {
-                final d = await pickDate(context, initial: _date);
-                if (d != null) setState(() => _date = d);
-              },
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(_date == null ? 'Pick a date' : fmtDate(toIso(_date))),
-              ),
-            ),
-            const SizedBox(height: 10),
-            const FieldLabel('Preferred time'),
-            TextField(controller: _slotCtrl, onChanged: (_) => setState(() {}), decoration: const InputDecoration(hintText: 'e.g. 10:00 am or after 5pm')),
-            const SizedBox(height: 10),
-            const FieldLabel('Note (optional)'),
-            TextField(controller: _noteCtrl, maxLines: 2, decoration: const InputDecoration(hintText: 'Anything the leaseholder should know…')),
-            const SizedBox(height: 14),
-            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: !canBook
-                    ? null
-                    : () {
-                        state.mutate(() => state.inspections.insert(
-                              0,
-                              Inspection(
-                                id: _rid('insp'),
-                                listingId: widget.listing.id,
-                                requestedBy: cu.id,
-                                to: widget.listing.by,
-                                date: toIso(_date)!,
-                                slot: _slotCtrl.text.trim(),
-                                note: _noteCtrl.text.trim(),
-                                createdAt: todayIso(),
-                              ),
-                            ));
-                        Navigator.pop(context);
-                      },
-                child: const Text('Request inspection'),
-              ),
-            ]),
-          ]),
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.isInvite ? 'Invite for inspection' : 'Book an inspection',
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  widget.isInvite
+                      ? 'Suggest a time for ${widget.listing.by} to come inspect your place.'
+                      : 'Request a time to view ${widget.listing.title}. The leaseholder confirms or suggests another time.',
+                  style: const TextStyle(color: HomiesColors.textDim, fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                const FieldLabel('Preferred date'),
+                OutlinedButton(
+                  onPressed: () async {
+                    final d = await pickDate(context, initial: _date);
+                    if (d != null) setState(() => _date = d);
+                  },
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(_date == null ? 'Pick a date' : fmtDate(toIso(_date))),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const FieldLabel('Preferred time'),
+                TextField(
+                    controller: _slotCtrl,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(hintText: 'e.g. 10:00 am or after 5pm')),
+                const SizedBox(height: 10),
+                const FieldLabel('Note (optional)'),
+                TextField(
+                    controller: _noteCtrl,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                        hintText: 'Anything the leaseholder should know…')),
+                const SizedBox(height: 14),
+                Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: !canBook
+                        ? null
+                        : () {
+                            state.mutate(() => state.inspections.insert(
+                                  0,
+                                  Inspection(
+                                    id: _rid('insp'),
+                                    listingId: widget.listing.id,
+                                    requestedBy: cu.id,
+                                    to: widget.listing.by,
+                                    date: toIso(_date)!,
+                                    slot: _slotCtrl.text.trim(),
+                                    note: _noteCtrl.text.trim(),
+                                    createdAt: todayIso(),
+                                  ),
+                                ));
+                            Navigator.pop(context);
+                          },
+                    child: Text(widget.isInvite ? 'Send invite' : 'Request inspection'),
+                  ),
+                ]),
+              ]),
         ),
       ),
     );
   }
 }
 
+// ─── Inspection card ──────────────────────────────────────────────────────────
+
 class _InspectionCard extends StatelessWidget {
   final Inspection inspection;
-  final bool incoming; // true = leaseholder reviewing a request
+  final bool incoming;
   const _InspectionCard({required this.inspection, required this.incoming});
 
   @override
@@ -864,17 +1437,26 @@ class _InspectionCard extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(incoming ? '${other?.name ?? '—'} wants to inspect' : 'Inspection with ${other?.name ?? '—'}',
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              Text(
+                incoming
+                    ? '${other?.name ?? '—'} wants to inspect'
+                    : 'Inspection with ${other?.name ?? '—'}',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
               Text(listing?.title ?? 'the property',
-                  style: const TextStyle(color: HomiesColors.textFaint, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
-              Text('${fmtDate(i.date)} · ${i.slot}', style: const TextStyle(color: HomiesColors.textDim, fontSize: 12)),
+                  style: const TextStyle(color: HomiesColors.textFaint, fontSize: 11),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+              Text('${fmtDate(i.date)} · ${i.slot}',
+                  style: const TextStyle(color: HomiesColors.textDim, fontSize: 12)),
             ]),
           ),
           HomiesChip(i.status, tone: tone),
         ]),
         if (i.note.isNotEmpty)
-          Padding(padding: const EdgeInsets.only(top: 6), child: Text('“${i.note}”', style: const TextStyle(fontSize: 12))),
+          Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text('"${i.note}"', style: const TextStyle(fontSize: 12))),
         if (incoming && i.status == 'requested')
           Padding(
             padding: const EdgeInsets.only(top: 10),
@@ -890,6 +1472,43 @@ class _InspectionCard extends StatelessWidget {
               ),
             ]),
           ),
+      ]),
+    );
+  }
+}
+
+// ─── Perf request banner ──────────────────────────────────────────────────────
+
+class _PerfRequestBanner extends StatelessWidget {
+  final User? requester;
+  final Listing listing;
+  final VoidCallback onOpen;
+  const _PerfRequestBanner({required this.requester, required this.listing, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    return HomiesCard(
+      borderColor: HomiesColors.accentSoft,
+      color: HomiesColors.accentSoft,
+      child: Row(children: [
+        const Icon(Icons.workspace_premium_rounded, size: 22, color: HomiesColors.accent),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+              '${requester?.name ?? 'A leaseholder'} asked about a tenant',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+            Text(
+              'Re: ${listing.title}',
+              style: const TextStyle(fontSize: 12, color: HomiesColors.accentStrong),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ]),
+        ),
+        const SizedBox(width: 8),
+        ElevatedButton(onPressed: onOpen, child: const Text('Respond')),
       ]),
     );
   }

@@ -7,6 +7,7 @@ import '../state/models.dart';
 import '../theme.dart';
 import '../util/format.dart';
 import '../widgets/avatar.dart';
+import '../widgets/file_picker_button.dart';
 import '../widgets/ui_kit.dart';
 
 class SubscriptionsScreen extends StatelessWidget {
@@ -35,8 +36,10 @@ class SubscriptionsScreen extends StatelessWidget {
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(s.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                      Text('${fmtAUD(s.amount)} / ${s.cadence} · paid by ${state.findUser(s.payer)?.name ?? '—'}',
-                          style: const TextStyle(color: HomiesColors.textDim, fontSize: 12)),
+                      Text(
+                        '${fmtAUD(s.amount)} / ${s.cadence} · paid by ${state.findUser(s.payer)?.name ?? '—'}',
+                        style: const TextStyle(color: HomiesColors.textDim, fontSize: 12),
+                      ),
                     ]),
                   ),
                   if (isLeaseholder || s.payer == cu.id) ...[
@@ -61,15 +64,21 @@ class SubscriptionsScreen extends StatelessWidget {
                 ]),
                 const Divider(),
                 for (final id in s.participants)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Row(children: [
-                      Avatar.sm(state.findUser(id)),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(state.findUser(id)?.name ?? '—', style: const TextStyle(fontSize: 12))),
-                      Text(fmtAUD(s.shares[id] ?? 0), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-                    ]),
+                  _SubShareRow(sub: s, userId: id, cu: cu),
+                const SizedBox(height: 8),
+                if (s.receipt != null) ...[
+                  const Text('Receipt', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: HomiesColors.textDim)),
+                  AttachmentTile(value: s.receipt!, compact: true),
+                  const SizedBox(height: 4),
+                ],
+                OutlinedButton.icon(
+                  onPressed: () => _openReceiptSheet(context, state, s),
+                  icon: const Icon(Icons.receipt_outlined, size: 14),
+                  label: Text(
+                    s.receipt == null ? 'Attach receipt' : 'Replace receipt',
+                    style: const TextStyle(fontSize: 12),
                   ),
+                ),
               ]),
             ),
         ]),
@@ -86,6 +95,165 @@ class SubscriptionsScreen extends StatelessWidget {
         child: _SubModal(existing: existing),
       ),
     );
+  }
+
+  void _openReceiptSheet(BuildContext context, HomiesState state, Subscription s) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => Padding(
+        padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('Attach receipt', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+          const SizedBox(height: 10),
+          FilePickerButton(
+            value: s.receipt,
+            onChanged: (f) {
+              state.mutate(() => s.receipt = f);
+              Navigator.pop(context);
+            },
+            label: 'Choose image or PDF',
+          ),
+          if (s.receipt != null)
+            TextButton(
+              onPressed: () {
+                state.mutate(() => s.receipt = null);
+                Navigator.pop(context);
+              },
+              child: const Text('Remove receipt', style: TextStyle(color: HomiesColors.danger)),
+            ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _SubShareRow extends StatelessWidget {
+  final Subscription sub;
+  final String userId;
+  final User cu;
+
+  const _SubShareRow({required this.sub, required this.userId, required this.cu});
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final user = state.findUser(userId);
+    if (user == null) return const SizedBox.shrink();
+
+    final isPayer = userId == sub.payer;
+    final paid = isPayer || sub.paidBy[userId] == true;
+    final pay = sub.payments[userId];
+    final isYou = userId == cu.id;
+    final canMark = cu.id == sub.payer || cu.role == 'leaseholder' || isYou;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: paid ? HomiesColors.okSoft : HomiesColors.surface2,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(children: [
+        Avatar.sm(user),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+              '${user.name}${isYou ? ' (you)' : ''}',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+            ),
+            Text(
+              fmtAUD(sub.shares[userId] ?? 0),
+              style: const TextStyle(color: HomiesColors.textDim, fontSize: 11),
+            ),
+            if (isPayer)
+              const Text(
+                'Subscription payer',
+                style: TextStyle(color: HomiesColors.ok, fontSize: 10.5, fontWeight: FontWeight.w500),
+              )
+            else if (paid && pay != null)
+              Row(children: [
+                const Icon(Icons.lock_outline, size: 11, color: HomiesColors.ok),
+                const SizedBox(width: 3),
+                Flexible(
+                  child: Text(
+                    'Paid ${fmtDateShort(pay.at)}${pay.confirmedBy != null ? ' · confirmed by ${pay.confirmedBy}' : ''}',
+                    style: const TextStyle(color: HomiesColors.ok, fontSize: 10.5, fontWeight: FontWeight.w500),
+                    maxLines: 2,
+                  ),
+                ),
+              ]),
+          ]),
+        ),
+        if (isPayer)
+          const HomiesChip('Payer', tone: ChipTone.accent)
+        else if (paid)
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            const HomiesChip('✓ Paid', tone: ChipTone.ok),
+            if (canMark)
+              IconButton(
+                tooltip: 'Undo payment record',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.undo, size: 16, color: HomiesColors.textDim),
+                onPressed: () => _undo(context, state),
+              ),
+          ])
+        else
+          OutlinedButton(
+            onPressed: canMark ? () => _markPaid(context, state, user) : null,
+            child: const Text('Mark paid', style: TextStyle(fontSize: 12)),
+          ),
+      ]),
+    );
+  }
+
+  Future<void> _markPaid(BuildContext context, HomiesState state, User user) async {
+    final isYou = userId == cu.id;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Save payment record'),
+        content: Text(
+          'Mark ${isYou ? 'your' : "${user.name}'s"} share of ${fmtAUD(sub.shares[userId] ?? 0)} as paid?\n\n'
+          'This will be saved under ${user.name}\'s name with today\'s date'
+          '${isYou ? '' : ', confirmed by ${cu.name}'} — so there\'s a clear record later.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm & save')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    state.mutate(() {
+      sub.paidBy[userId] = true;
+      sub.payments[userId] = Payment(
+        payerId: userId,
+        payerName: user.name,
+        confirmedBy: cu.id == userId ? null : cu.name,
+        at: DateTime.now().toIso8601String(),
+        amount: sub.shares[userId] ?? 0,
+      );
+    });
+  }
+
+  Future<void> _undo(BuildContext context, HomiesState state) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        content: const Text('Undo this payment? The saved record will be removed.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Undo', style: TextStyle(color: HomiesColors.danger))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    state.mutate(() {
+      sub.paidBy[userId] = false;
+      sub.payments.remove(userId);
+    });
   }
 }
 
@@ -185,7 +353,7 @@ class _SubModalState extends State<_SubModal> {
               ])),
               const SizedBox(width: 10),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const FieldLabel('Cadence'),
+                const FieldLabel('Frequency'),
                 DropdownButtonFormField<String>(
                   initialValue: cadence,
                   items: const [
