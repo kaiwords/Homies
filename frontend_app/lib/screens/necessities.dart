@@ -65,6 +65,25 @@ class _NecessitiesScreenState extends State<NecessitiesScreen> {
 
   void _add(HomiesState state) {
     final cu = state.currentUser!;
+    if (mode == 'individual') {
+      state.mutate(() {
+        state.personalExpenses.add(PersonalExpense(
+          id: 'pe-${DateTime.now().millisecondsSinceEpoch}',
+          userId: cu.id,
+          category: 'necessity',
+          title: itemCtrl.text.trim(),
+          amount: _amount,
+          date: todayIso(),
+        ));
+      });
+      itemCtrl.clear();
+      amountCtrl.clear();
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Added to your personal spending')),
+      );
+      return;
+    }
     final shares = _previewShares();
     // The buyer fronted the money, so their own share is recorded as paid.
     final paidBy = <String, bool>{};
@@ -85,10 +104,10 @@ class _NecessitiesScreenState extends State<NecessitiesScreen> {
           id: 'n-${Random().nextInt(0xFFFF).toRadixString(36)}',
           item: itemCtrl.text.trim(),
           amount: _amount,
-          mode: mode,
+          mode: 'shared',
           payer: cu.id,
           date: todayIso(),
-          split: mode == 'individual' ? 'equal' : split,
+          split: split,
           participants: shares.keys.toList(),
           shares: shares,
           paidBy: paidBy,
@@ -153,7 +172,7 @@ class _NecessitiesScreenState extends State<NecessitiesScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const FieldLabel('Mode'),
+                    const FieldLabel('Who is this for?'),
                     Segment<String>(
                       options: const ['shared', 'individual'],
                       value: mode,
@@ -163,6 +182,26 @@ class _NecessitiesScreenState extends State<NecessitiesScreen> {
                   ]),
                 ),
               ]),
+              if (mode == 'individual') ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: HomiesColors.accentSoft,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(children: [
+                    Icon(Icons.person_outlined, size: 15, color: HomiesColors.accentStrong),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Saved to your personal spending only — not shared with housemates.',
+                        style: TextStyle(fontSize: 12, color: HomiesColors.accentStrong),
+                      ),
+                    ),
+                  ]),
+                ),
+              ],
               if (mode == 'shared') ...[
                 const SizedBox(height: 10),
                 const FieldLabel('Divide between'),

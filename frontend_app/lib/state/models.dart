@@ -947,6 +947,164 @@ class CleaningDayAvailability {
       );
 }
 
+// ── Maintenance contacts ──────────────────────────────────────────────────────
+
+class MaintenanceContact {
+  String id;
+  String name;
+  String category; // 'emergency' | 'property' | 'utilities' | 'trades' | 'other'
+  String? phone;
+  String? email;
+  String? notes;
+  String addedBy;
+  String addedAt;
+
+  MaintenanceContact({
+    required this.id,
+    required this.name,
+    this.category = 'other',
+    this.phone,
+    this.email,
+    this.notes,
+    required this.addedBy,
+    required this.addedAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'category': category,
+        'phone': phone,
+        'email': email,
+        'notes': notes,
+        'addedBy': addedBy,
+        'addedAt': addedAt,
+      };
+
+  factory MaintenanceContact.fromJson(Map<String, dynamic> j) =>
+      MaintenanceContact(
+        id: j['id'] as String,
+        name: (j['name'] ?? '') as String,
+        category: (j['category'] ?? 'other') as String,
+        phone: j['phone'] as String?,
+        email: j['email'] as String?,
+        notes: j['notes'] as String?,
+        addedBy: (j['addedBy'] ?? '') as String,
+        addedAt: (j['addedAt'] ?? '') as String,
+      );
+}
+
+// ── Welcome guide ────────────────────────────────────────────────────────────
+
+class WelcomeSection {
+  String id;
+  String icon;
+  String title;
+  String content;
+
+  WelcomeSection({
+    required this.id,
+    this.icon = '',
+    required this.title,
+    this.content = '',
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'icon': icon,
+        'title': title,
+        'content': content,
+      };
+
+  factory WelcomeSection.fromJson(Map<String, dynamic> j) => WelcomeSection(
+        id: j['id'] as String,
+        icon: (j['icon'] ?? '') as String,
+        title: (j['title'] ?? '') as String,
+        content: (j['content'] ?? '') as String,
+      );
+}
+
+class WelcomeGuide {
+  String message;
+  List<WelcomeSection> sections;
+
+  WelcomeGuide({this.message = '', List<WelcomeSection>? sections})
+      : sections = sections ?? [];
+
+  Map<String, dynamic> toJson() => {
+        'message': message,
+        'sections': sections.map((s) => s.toJson()).toList(),
+      };
+
+  factory WelcomeGuide.fromJson(Map<String, dynamic> j) => WelcomeGuide(
+        message: (j['message'] ?? '') as String,
+        sections: ((j['sections'] as List?) ?? [])
+            .map((e) => WelcomeSection.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
+/// A request from one housemate to swap an assigned cleaning task with another.
+class ChoreSwapRequest {
+  String id;
+  String taskId;
+  String fromUserId;
+  String fromUserName;
+  String? toUserId; // null = open to any housemate
+  String? toUserName;
+  String? note;
+  String requestedAt;
+  String status; // 'pending' | 'accepted' | 'declined' | 'cancelled'
+  String? respondedAt;
+  String? respondedBy;
+  String? respondedByName;
+
+  ChoreSwapRequest({
+    required this.id,
+    required this.taskId,
+    required this.fromUserId,
+    required this.fromUserName,
+    this.toUserId,
+    this.toUserName,
+    this.note,
+    required this.requestedAt,
+    this.status = 'pending',
+    this.respondedAt,
+    this.respondedBy,
+    this.respondedByName,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'taskId': taskId,
+        'fromUserId': fromUserId,
+        'fromUserName': fromUserName,
+        'toUserId': toUserId,
+        'toUserName': toUserName,
+        'note': note,
+        'requestedAt': requestedAt,
+        'status': status,
+        'respondedAt': respondedAt,
+        'respondedBy': respondedBy,
+        'respondedByName': respondedByName,
+      };
+
+  factory ChoreSwapRequest.fromJson(Map<String, dynamic> j) => ChoreSwapRequest(
+        id: j['id'] as String,
+        taskId: (j['taskId'] ?? '') as String,
+        fromUserId: (j['fromUserId'] ?? '') as String,
+        fromUserName: (j['fromUserName'] ?? '') as String,
+        toUserId: j['toUserId'] as String?,
+        toUserName: j['toUserName'] as String?,
+        note: j['note'] as String?,
+        requestedAt: (j['requestedAt'] ?? '') as String,
+        status: (j['status'] ?? 'pending') as String,
+        respondedAt: j['respondedAt'] as String?,
+        respondedBy: j['respondedBy'] as String?,
+        respondedByName: j['respondedByName'] as String?,
+      );
+}
+
 class RentShare {
   String userId;
   double amount;
@@ -1317,6 +1475,197 @@ class Issue {
         status: (j['status'] ?? 'open') as String,
         fixedAt: j['fixedAt'] as String?,
         fixedBy: j['fixedBy'] as String?,
+      );
+}
+
+/// Records that a specific tenant paid their rent share for a given period.
+class RentPayment {
+  String id;
+  String userId;
+  String userName;
+  double amount;
+  String paidAt; // ISO timestamp
+  String periodStart; // ISO date — identifies which rent period this covers
+  String? confirmedBy; // who marked it paid if different from the payer
+
+  RentPayment({
+    required this.id,
+    required this.userId,
+    required this.userName,
+    required this.amount,
+    required this.paidAt,
+    required this.periodStart,
+    this.confirmedBy,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'userId': userId,
+        'userName': userName,
+        'amount': amount,
+        'paidAt': paidAt,
+        'periodStart': periodStart,
+        'confirmedBy': confirmedBy,
+      };
+
+  factory RentPayment.fromJson(Map<String, dynamic> j) => RentPayment(
+        id: j['id'] as String,
+        userId: (j['userId'] ?? '') as String,
+        userName: (j['userName'] ?? '') as String,
+        amount: ((j['amount'] ?? 0) as num).toDouble(),
+        paidAt: (j['paidAt'] ?? '') as String,
+        periodStart: (j['periodStart'] ?? '') as String,
+        confirmedBy: j['confirmedBy'] as String?,
+      );
+}
+
+/// A personal (non-shared) expense the user wants to track against their own budget.
+class PersonalExpense {
+  String id;
+  String userId;
+  // 'grocery' | 'necessity' | 'subscription' | 'other'
+  String category;
+  String title;
+  double amount;
+  String date; // ISO date string (YYYY-MM-DD)
+  String? note;
+
+  PersonalExpense({
+    required this.id,
+    required this.userId,
+    required this.category,
+    required this.title,
+    required this.amount,
+    required this.date,
+    this.note,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'userId': userId,
+        'category': category,
+        'title': title,
+        'amount': amount,
+        'date': date,
+        'note': note,
+      };
+
+  factory PersonalExpense.fromJson(Map<String, dynamic> j) => PersonalExpense(
+        id: j['id'] as String,
+        userId: (j['userId'] ?? '') as String,
+        category: (j['category'] ?? 'other') as String,
+        title: (j['title'] ?? '') as String,
+        amount: ((j['amount'] ?? 0) as num).toDouble(),
+        date: (j['date'] ?? '') as String,
+        note: j['note'] as String?,
+      );
+}
+
+/// Device-local notification preferences for the signed-in user.
+class NotificationPrefs {
+  bool rent;
+  bool bills;
+  bool chores;
+  bool parties;
+  int hour; // hour of day to fire reminders (0–23)
+
+  NotificationPrefs({
+    this.rent = true,
+    this.bills = true,
+    this.chores = true,
+    this.parties = true,
+    this.hour = 8,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'rent': rent,
+        'bills': bills,
+        'chores': chores,
+        'parties': parties,
+        'hour': hour,
+      };
+
+  factory NotificationPrefs.fromJson(Map<String, dynamic> j) => NotificationPrefs(
+        rent: (j['rent'] ?? true) as bool,
+        bills: (j['bills'] ?? true) as bool,
+        chores: (j['chores'] ?? true) as bool,
+        parties: (j['parties'] ?? true) as bool,
+        hour: ((j['hour'] ?? 8) as num).toInt(),
+      );
+}
+
+class CalendarNote {
+  String id;
+  String userId;
+  String title;
+  String date; // ISO date YYYY-MM-DD
+  String? note;
+
+  CalendarNote({required this.id, required this.userId, required this.title, required this.date, this.note});
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'userId': userId,
+        'title': title,
+        'date': date,
+        'note': note,
+      };
+
+  static CalendarNote fromJson(Map<String, dynamic> j) => CalendarNote(
+        id: j['id'] as String,
+        userId: j['userId'] as String,
+        title: j['title'] as String,
+        date: j['date'] as String,
+        note: j['note'] as String?,
+      );
+}
+
+/// A live shared shopping list item that any housemate can add, tick off, or remove.
+class ShoppingItem {
+  String id;
+  String text;
+  String addedBy;
+  String addedByName;
+  String addedAt; // ISO timestamp
+  bool done;
+  String? doneBy;
+  String? doneByName;
+  String? doneAt;
+
+  ShoppingItem({
+    required this.id,
+    required this.text,
+    required this.addedBy,
+    required this.addedByName,
+    required this.addedAt,
+    this.done = false,
+    this.doneBy,
+    this.doneByName,
+    this.doneAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'text': text,
+        'addedBy': addedBy,
+        'addedByName': addedByName,
+        'addedAt': addedAt,
+        'done': done,
+        'doneBy': doneBy,
+        'doneByName': doneByName,
+        'doneAt': doneAt,
+      };
+
+  factory ShoppingItem.fromJson(Map<String, dynamic> j) => ShoppingItem(
+        id: j['id'] as String,
+        text: (j['text'] ?? '') as String,
+        addedBy: (j['addedBy'] ?? '') as String,
+        addedByName: (j['addedByName'] ?? '') as String,
+        addedAt: (j['addedAt'] ?? '') as String,
+        done: (j['done'] ?? false) as bool,
+        doneBy: j['doneBy'] as String?,
+        doneByName: j['doneByName'] as String?,
+        doneAt: j['doneAt'] as String?,
       );
 }
 

@@ -263,9 +263,16 @@ class FinanceScreen extends StatelessWidget {
   }
 }
 
-class _RentSummaryCard extends StatelessWidget {
+class _RentSummaryCard extends StatefulWidget {
   final double perPersonRent;
   const _RentSummaryCard({required this.perPersonRent});
+
+  @override
+  State<_RentSummaryCard> createState() => _RentSummaryCardState();
+}
+
+class _RentSummaryCardState extends State<_RentSummaryCard> {
+  bool _expanded = false;
 
   String? _nextDue(HomiesState state) {
     var d = state.property.rentStartDate;
@@ -299,6 +306,11 @@ class _RentSummaryCard extends StatelessWidget {
     final isEqualSplit = !hasCustomShares ||
         shares.every((s) => (s.amount - equalAmount).abs() < 0.01);
 
+    final periodStart = _currentPeriodStart(state);
+    final periodPayments = periodStart != null
+        ? state.rentPayments.where((p) => p.periodStart == periodStart).toList()
+        : <RentPayment>[];
+
     return HomiesCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
@@ -331,27 +343,91 @@ class _RentSummaryCard extends StatelessWidget {
               onPressed: () => _openShareEditor(context, state),
             ),
         ]),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         const Divider(height: 1),
-        const SizedBox(height: 10),
-        // Per-person breakdown — visible to everyone
-        if (!hasCustomShares) ...[
-          for (final u in active)
-            _shareRow(context, state, u, equalAmount, isEqualSplit),
+
+        // Tappable period row — always visible, toggles the housemate list
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(children: [
+              if (periodStart != null) ...[
+                Expanded(
+                  child: Text(
+                    _periodLabel(periodStart, state.property.rentCadence),
+                    style: const TextStyle(fontSize: 12, color: HomiesColors.textDim, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                Text(
+                  '${periodPayments.length}/${active.length} paid',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: periodPayments.length >= active.length
+                        ? HomiesColors.ok
+                        : periodPayments.isNotEmpty
+                            ? HomiesColors.warn
+                            : HomiesColors.textFaint,
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ] else
+                const Expanded(child: Text('No rent period set', style: TextStyle(fontSize: 12, color: HomiesColors.textFaint))),
+              AnimatedRotation(
+                turns: _expanded ? 0.5 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: const Icon(Icons.expand_more, size: 18, color: HomiesColors.textDim),
+              ),
+            ]),
+          ),
+        ),
+
+        // Collapsible: per-person rows + notes + history
+        if (_expanded) ...[
           const SizedBox(height: 4),
-          const Text('Equal split — each person pays the same amount.',
-              style: TextStyle(color: HomiesColors.textFaint, fontSize: 11)),
-        ] else ...[
-          for (final s in shares)
-            _shareRowFromRentShare(context, state, s),
-          if (!isEqualSplit && state.property.rentShareExplanation?.isNotEmpty == true) ...[
+
+          for (final u in active)
+            _RentPayRow(
+              user: u,
+              amount: _amountFor(state, u, equalAmount),
+              features: _featuresFor(state, u),
+              payment: periodPayments.firstWhereOrNull((p) => p.userId == u.id),
+              isYou: u.id == cu.id,
+              canMark: isLeaseholder || u.id == cu.id,
+              cu: cu,
+              onMarkPaid: periodStart == null
+                  ? null
+                  : () => state.mutate(() {
+                        state.rentPayments.add(RentPayment(
+                          id: 'rp_${DateTime.now().millisecondsSinceEpoch}',
+                          userId: u.id,
+                          userName: u.name,
+                          amount: _amountFor(state, u, equalAmount),
+                          paidAt: DateTime.now().toIso8601String(),
+                          periodStart: periodStart,
+                          confirmedBy: cu.id != u.id ? cu.name : null,
+                        ));
+                      }),
+              onUndo: periodStart == null
+                  ? null
+                  : () => state.mutate(() {
+                        state.rentPayments.removeWhere(
+                          (p) => p.userId == u.id && p.periodStart == periodStart,
+                        );
+                      }),
+            ),
+
+          if (!hasCustomShares) ...[
+            const SizedBox(height: 4),
+            const Text('Equal split — each person pays the same amount.',
+                style: TextStyle(color: HomiesColors.textFaint, fontSize: 11)),
+          ] else if (!isEqualSplit && state.property.rentShareExplanation?.isNotEmpty == true) ...[
             const SizedBox(height: 6),
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: HomiesColors.surface2,
-                borderRadius: BorderRadius.circular(8),
-              ),
+              decoration: BoxDecoration(color: HomiesColors.surface2, borderRadius: BorderRadius.circular(8)),
               child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Icon(Icons.info_outline, size: 14, color: HomiesColors.textDim),
                 const SizedBox(width: 6),
@@ -364,56 +440,92 @@ class _RentSummaryCard extends StatelessWidget {
               ]),
             ),
           ],
+
+          if (state.rentPayments.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Divider(height: 1),
+            TextButton.icon(
+              icon: const Icon(Icons.history, size: 15),
+              label: const Text('Payment history'),
+              style: TextButton.styleFrom(
+                foregroundColor: HomiesColors.textDim,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: () => _showHistory(context, state),
+            ),
+          ],
         ],
       ]),
     );
   }
 
-  Widget _shareRow(BuildContext context, HomiesState state, User? user, double amount, bool isEqual) {
-    if (user == null) return const SizedBox.shrink();
-    final cu = state.currentUser;
-    final isYou = user.id == cu?.id;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(children: [
-        Avatar.sm(user),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text('${user.name}${isYou ? ' (you)' : ''}',
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-        ),
-        Text(fmtAUD(amount), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-      ]),
-    );
+  // Returns the start date of the rent period that contains today.
+  String? _currentPeriodStart(HomiesState state) {
+    final startDate = state.property.rentStartDate;
+    if (startDate == null || startDate.isEmpty) return null;
+    final startParsed = parseIso(startDate);
+    if (startParsed == null) return null;
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    if (!startParsed.isBefore(todayDate)) return startDate;
+    var current = startDate;
+    var guard = 0;
+    while (guard++ < 5000) {
+      final next = addCadence(current, state.property.rentCadence, null);
+      if (next == null) break;
+      final nd = parseIso(next);
+      if (nd == null) break;
+      if (!DateTime(nd.year, nd.month, nd.day).isAfter(todayDate)) {
+        current = next;
+      } else {
+        break;
+      }
+    }
+    return current;
   }
 
-  Widget _shareRowFromRentShare(BuildContext context, HomiesState state, RentShare s) {
-    final user = state.findUser(s.userId);
-    if (user == null) return const SizedBox.shrink();
-    final cu = state.currentUser;
-    final isYou = user.id == cu?.id;
-    final features = <String>[];
-    if (s.hasParking) features.add('Parking');
-    if (s.hasBalcony) features.add('Balcony');
-    if (s.hasPrivateWashroom) features.add('Washroom');
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Avatar.sm(user),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${user.name}${isYou ? ' (you)' : ''}',
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-            if (features.isNotEmpty)
-              Wrap(spacing: 4, children: [
-                for (final f in features)
-                  HomiesChip(f, tone: ChipTone.accent),
-              ]),
-          ]),
-        ),
-        Text(fmtAUD(s.amount), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-      ]),
+  String _periodLabel(String periodStart, String cadence) {
+    final d = parseIso(periodStart);
+    if (d == null) return fmtDateShort(periodStart);
+    switch (cadence) {
+      case 'weekly':
+      case 'fortnightly':
+        final next = addCadence(periodStart, cadence, null);
+        final end = next != null ? parseIso(next)?.subtract(const Duration(days: 1)) : null;
+        return end != null
+            ? '${fmtDateShort(periodStart)} – ${fmtDateShort(end.toIso8601String())}'
+            : 'From ${fmtDateShort(periodStart)}';
+      case 'monthly':
+        const months = ['', 'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'];
+        return '${months[d.month]} ${d.year}';
+      default:
+        return 'From ${fmtDateShort(periodStart)}';
+    }
+  }
+
+  double _amountFor(HomiesState state, User u, double equalAmount) {
+    final rs = state.rentShares.firstWhereOrNull((s) => s.userId == u.id);
+    return rs?.amount ?? equalAmount;
+  }
+
+  List<String> _featuresFor(HomiesState state, User u) {
+    final rs = state.rentShares.firstWhereOrNull((s) => s.userId == u.id);
+    if (rs == null) return [];
+    return [
+      if (rs.hasParking) 'Parking',
+      if (rs.hasBalcony) 'Balcony',
+      if (rs.hasPrivateWashroom) 'Washroom',
+    ];
+  }
+
+  void _showHistory(BuildContext context, HomiesState state) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _RentHistorySheet(state: state),
     );
   }
 
@@ -422,6 +534,275 @@ class _RentSummaryCard extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       builder: (_) => _RentShareEditorSheet(state: state),
+    );
+  }
+}
+
+// ─── Rent pay row ─────────────────────────────────────────────────────────────
+
+class _RentPayRow extends StatelessWidget {
+  final User user;
+  final double amount;
+  final List<String> features;
+  final RentPayment? payment;
+  final bool isYou;
+  final bool canMark;
+  final User cu;
+  final VoidCallback? onMarkPaid;
+  final VoidCallback? onUndo;
+
+  const _RentPayRow({
+    required this.user,
+    required this.amount,
+    required this.features,
+    this.payment,
+    required this.isYou,
+    required this.canMark,
+    required this.cu,
+    this.onMarkPaid,
+    this.onUndo,
+  });
+
+  bool get _isPaid => payment != null;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: _isPaid ? HomiesColors.okSoft : HomiesColors.surface2,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(children: [
+        Avatar.sm(user),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+              '${user.name}${isYou ? ' (you)' : ''}',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+            ),
+            if (features.isNotEmpty)
+              Wrap(spacing: 4, children: [
+                for (final f in features) HomiesChip(f, tone: ChipTone.accent),
+              ]),
+            if (_isPaid && payment != null)
+              Row(children: [
+                const Icon(Icons.lock_outline, size: 11, color: HomiesColors.ok),
+                const SizedBox(width: 3),
+                Flexible(
+                  child: Text(
+                    '${fmtDateShort(payment!.paidAt)}${payment!.confirmedBy != null ? ' · ${payment!.confirmedBy}' : ''}',
+                    style: const TextStyle(color: HomiesColors.ok, fontSize: 10.5),
+                    maxLines: 1,
+                  ),
+                ),
+              ]),
+          ]),
+        ),
+        Text(fmtAUD(amount),
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              color: _isPaid ? HomiesColors.ok : HomiesColors.text,
+            )),
+        const SizedBox(width: 6),
+        if (_isPaid)
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            const HomiesChip('✓ Paid', tone: ChipTone.ok),
+            if (canMark && onUndo != null)
+              IconButton(
+                tooltip: 'Undo',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.undo, size: 16, color: HomiesColors.textDim),
+                onPressed: () => _confirmUndo(context),
+              ),
+          ])
+        else if (canMark && onMarkPaid != null)
+          OutlinedButton(
+            onPressed: () => _confirmMark(context),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('Mark paid', style: TextStyle(fontSize: 11)),
+          )
+        else
+          const SizedBox.shrink(),
+      ]),
+    );
+  }
+
+  Future<void> _confirmMark(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Save rent payment'),
+        content: Text(
+          'Mark ${isYou ? 'your' : "${user.name}'s"} rent share of ${fmtAUD(amount)} as paid?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm')),
+        ],
+      ),
+    );
+    if (ok == true) onMarkPaid?.call();
+  }
+
+  Future<void> _confirmUndo(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        content: const Text('Remove this rent payment record?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove', style: TextStyle(color: HomiesColors.danger)),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) onUndo?.call();
+  }
+}
+
+// ─── Rent history sheet ───────────────────────────────────────────────────────
+
+class _RentHistorySheet extends StatelessWidget {
+  final HomiesState state;
+  const _RentHistorySheet({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    // Group payments by periodStart, most recent first
+    final byPeriod = <String, List<RentPayment>>{};
+    for (final p in state.rentPayments) {
+      (byPeriod[p.periodStart] ??= []).add(p);
+    }
+    final periods = byPeriod.keys.toList()..sort((a, b) => b.compareTo(a));
+
+    final cadence = state.property.rentCadence;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.92,
+      expand: false,
+      builder: (_, ctrl) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        child: ListView(controller: ctrl, children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 14),
+              decoration: BoxDecoration(
+                color: HomiesColors.textFaint,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const Text('Rent payment history',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text('All recorded rent payments per period.',
+              style: const TextStyle(color: HomiesColors.textDim, fontSize: 13)),
+          const SizedBox(height: 12),
+          for (final period in periods) ...[
+            _PeriodGroup(
+              period: period,
+              cadence: cadence,
+              payments: byPeriod[period]!,
+              activeCount: state.activeHousemates.length,
+            ),
+            const SizedBox(height: 8),
+          ],
+        ]),
+      ),
+    );
+  }
+}
+
+class _PeriodGroup extends StatelessWidget {
+  final String period;
+  final String cadence;
+  final List<RentPayment> payments;
+  final int activeCount;
+  const _PeriodGroup({
+    required this.period,
+    required this.cadence,
+    required this.payments,
+    required this.activeCount,
+  });
+
+  String _label() {
+    final d = parseIso(period);
+    if (d == null) return fmtDateShort(period);
+    switch (cadence) {
+      case 'weekly':
+      case 'fortnightly':
+        final next = addCadence(period, cadence, null);
+        final end = next != null ? parseIso(next)?.subtract(const Duration(days: 1)) : null;
+        return end != null
+            ? '${fmtDateShort(period)} – ${fmtDateShort(end.toIso8601String())}'
+            : 'From ${fmtDateShort(period)}';
+      case 'monthly':
+        const months = ['', 'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'];
+        return '${months[d.month]} ${d.year}';
+      default:
+        return 'From ${fmtDateShort(period)}';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final allPaid = payments.length >= activeCount;
+    return Container(
+      decoration: BoxDecoration(
+        color: allPaid ? HomiesColors.okSoft : HomiesColors.surface2,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: allPaid
+              ? HomiesColors.ok.withValues(alpha: 0.2)
+              : HomiesColors.border,
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(
+            child: Text(_label(),
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          ),
+          HomiesChip(
+            '${payments.length}/$activeCount paid',
+            tone: allPaid ? ChipTone.ok : ChipTone.warn,
+          ),
+        ]),
+        const SizedBox(height: 6),
+        for (final p in payments..sort((a, b) => a.paidAt.compareTo(b.paidAt)))
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(children: [
+              const Icon(Icons.check_circle_outline, size: 13, color: HomiesColors.ok),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(p.userName,
+                    style: const TextStyle(fontSize: 12, color: HomiesColors.textDim)),
+              ),
+              Text(fmtAUD(p.amount),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              const SizedBox(width: 8),
+              Text(fmtDateShort(p.paidAt),
+                  style: const TextStyle(fontSize: 11, color: HomiesColors.textFaint)),
+            ]),
+          ),
+      ]),
     );
   }
 }

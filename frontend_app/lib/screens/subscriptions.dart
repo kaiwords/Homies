@@ -272,6 +272,7 @@ class _SubModalState extends State<_SubModal> {
   String cadence = 'monthly';
   String? payer;
   late List<String> participants;
+  String _mode = 'shared'; // 'shared' | 'individual' — only for new subscriptions
 
   @override
   void initState() {
@@ -305,6 +306,24 @@ class _SubModalState extends State<_SubModal> {
 
   void _save() {
     final total = double.tryParse(amountCtrl.text) ?? 0;
+    if (_mode == 'individual' && widget.existing == null) {
+      final uid = state.currentUser!.id;
+      state.mutate(() {
+        state.personalExpenses.add(PersonalExpense(
+          id: 'pe-${DateTime.now().millisecondsSinceEpoch}',
+          userId: uid,
+          category: 'subscription',
+          title: nameCtrl.text.trim(),
+          amount: total,
+          date: todayIso(),
+        ));
+      });
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Added to your personal spending')),
+      );
+      return;
+    }
     final arr = equalSplit(total, participants.length);
     final shares = {for (var i = 0; i < participants.length; i++) participants[i]: arr[i]};
     state.mutate(() {
@@ -366,36 +385,69 @@ class _SubModalState extends State<_SubModal> {
                 ),
               ])),
             ]),
-            const SizedBox(height: 10),
-            const FieldLabel('Paid by'),
-            DropdownButtonFormField<String>(
-              initialValue: payer,
-              items: [for (final u in hms) DropdownMenuItem(value: u.id, child: Text(u.name))],
-              onChanged: (v) => setState(() => payer = v),
-            ),
-            const SizedBox(height: 10),
-            const FieldLabel('Split between'),
-            Wrap(spacing: 6, runSpacing: 4, children: [
-              for (final u in hms)
-                FilterChip(
-                  label: Text(u.name),
-                  selected: participants.contains(u.id),
-                  onSelected: (v) => setState(() {
-                    if (v) {
-                      participants.add(u.id);
-                    } else {
-                      participants.remove(u.id);
-                    }
-                  }),
+            if (!isEdit) ...[
+              const SizedBox(height: 10),
+              const FieldLabel('Who is this for?'),
+              Segment<String>(
+                options: const ['shared', 'individual'],
+                value: _mode,
+                labelFor: (v) => v == 'shared' ? 'Shared with housemates' : 'Just me',
+                onChanged: (v) => setState(() => _mode = v),
+              ),
+              if (_mode == 'individual') ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: HomiesColors.accentSoft,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(children: [
+                    Icon(Icons.person_outlined, size: 15, color: HomiesColors.accentStrong),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'This will be saved directly to your personal spending — not visible to housemates.',
+                        style: TextStyle(fontSize: 12, color: HomiesColors.accentStrong),
+                      ),
+                    ),
+                  ]),
                 ),
-            ]),
-            const Hint("Anyone not ticked is excluded — useful when a housemate doesn't use the service."),
+              ],
+            ],
+            if (_mode == 'shared' || isEdit) ...[
+              const SizedBox(height: 10),
+              const FieldLabel('Paid by'),
+              DropdownButtonFormField<String>(
+                initialValue: payer,
+                items: [for (final u in hms) DropdownMenuItem(value: u.id, child: Text(u.name))],
+                onChanged: (v) => setState(() => payer = v),
+              ),
+              const SizedBox(height: 10),
+              const FieldLabel('Split between'),
+              Wrap(spacing: 6, runSpacing: 4, children: [
+                for (final u in hms)
+                  FilterChip(
+                    label: Text(u.name),
+                    selected: participants.contains(u.id),
+                    onSelected: (v) => setState(() {
+                      if (v) {
+                        participants.add(u.id);
+                      } else {
+                        participants.remove(u.id);
+                      }
+                    }),
+                  ),
+              ]),
+              const Hint("Anyone not ticked is excluded — useful when a housemate doesn't use the service."),
+            ],
             const SizedBox(height: 14),
             Row(mainAxisAlignment: MainAxisAlignment.end, children: [
               TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
               const SizedBox(width: 8),
               ElevatedButton(
-                onPressed: nameCtrl.text.trim().isEmpty || amountCtrl.text.trim().isEmpty || participants.isEmpty ? null : _save,
+                onPressed: nameCtrl.text.trim().isEmpty || amountCtrl.text.trim().isEmpty ||
+                           (_mode == 'shared' && participants.isEmpty) ? null : _save,
                 child: Text(isEdit ? 'Save changes' : 'Add'),
               ),
             ]),

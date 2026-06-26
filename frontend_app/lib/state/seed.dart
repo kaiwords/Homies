@@ -1011,4 +1011,230 @@ class SeedData {
           at: '2026-05-25T10:10:00.000',
         ),
       ];
+
+  // Rent is $980/wk split equally among 4 housemates = $245/person.
+  // Rent week starts every Monday from 2025-09-01 (Sep 1 = Mon).
+  // Current week: 2026-06-22. u1+u2 paid; u3+u4 still outstanding.
+  static List<RentPayment> rentPayments() => [
+        // Current period – week of 22 Jun 2026
+        RentPayment(id: 'rp1', userId: 'u1', userName: 'Maya Chen',    amount: 245, paidAt: '2026-06-22T08:30:00.000', periodStart: '2026-06-22'),
+        RentPayment(id: 'rp2', userId: 'u2', userName: 'Daniel Okafor', amount: 245, paidAt: '2026-06-22T09:15:00.000', periodStart: '2026-06-22'),
+        // Previous period – week of 15 Jun 2026
+        RentPayment(id: 'rp3', userId: 'u1', userName: 'Maya Chen',    amount: 245, paidAt: '2026-06-15T08:00:00.000', periodStart: '2026-06-15'),
+        RentPayment(id: 'rp4', userId: 'u2', userName: 'Daniel Okafor', amount: 245, paidAt: '2026-06-15T09:00:00.000', periodStart: '2026-06-15'),
+        RentPayment(id: 'rp5', userId: 'u3', userName: 'Priya Sharma',  amount: 245, paidAt: '2026-06-15T10:30:00.000', periodStart: '2026-06-15'),
+        RentPayment(id: 'rp6', userId: 'u4', userName: 'Tom Becker',    amount: 245, paidAt: '2026-06-16T11:00:00.000', periodStart: '2026-06-15'),
+        // Two periods ago – week of 8 Jun 2026
+        RentPayment(id: 'rp7',  userId: 'u1', userName: 'Maya Chen',    amount: 245, paidAt: '2026-06-08T08:00:00.000', periodStart: '2026-06-08'),
+        RentPayment(id: 'rp8',  userId: 'u2', userName: 'Daniel Okafor', amount: 245, paidAt: '2026-06-08T09:00:00.000', periodStart: '2026-06-08'),
+        RentPayment(id: 'rp9',  userId: 'u3', userName: 'Priya Sharma',  amount: 245, paidAt: '2026-06-08T10:00:00.000', periodStart: '2026-06-08'),
+        RentPayment(id: 'rp10', userId: 'u4', userName: 'Tom Becker',    amount: 245, paidAt: '2026-06-09T12:00:00.000', periodStart: '2026-06-08'),
+      ];
+
+  static List<PersonalExpense> personalExpenses() => [
+        PersonalExpense(
+          id: 'pe1',
+          userId: 'u1',
+          category: 'grocery',
+          title: 'Woolworths — personal groceries',
+          amount: 47.50,
+          date: '2026-06-22',
+          note: 'Weekly shop for myself',
+        ),
+        PersonalExpense(
+          id: 'pe2',
+          userId: 'u1',
+          category: 'subscription',
+          title: 'iCloud Storage (200 GB)',
+          amount: 1.49,
+          date: '2026-06-15',
+        ),
+        PersonalExpense(
+          id: 'pe3',
+          userId: 'u1',
+          category: 'other',
+          title: 'Phone case',
+          amount: 24.99,
+          date: '2026-06-10',
+        ),
+        PersonalExpense(
+          id: 'pe4',
+          userId: 'u1',
+          category: 'grocery',
+          title: 'Harris Farm — coffee & snacks',
+          amount: 18.50,
+          date: '2026-06-08',
+        ),
+        PersonalExpense(
+          id: 'pe5',
+          userId: 'u1',
+          category: 'necessity',
+          title: 'Personal toiletries',
+          amount: 32.80,
+          date: '2026-05-29',
+        ),
+      ];
+
+  static List<ChoreSwapRequest> choreSwaps() => [
+        // Priya can't do her oven task — open to anyone
+        ChoreSwapRequest(
+          id: 'sw1',
+          taskId: 'c1',
+          fromUserId: 'u3',
+          fromUserName: 'Priya Sharma',
+          toUserId: null, // open to any housemate
+          note: "I'll be out of town that day",
+          requestedAt: '2026-06-23T18:00:00.000',
+        ),
+        // Tom asks Maya specifically to take his vacuum task
+        ChoreSwapRequest(
+          id: 'sw2',
+          taskId: 'c2',
+          fromUserId: 'u4',
+          fromUserName: 'Tom Becker',
+          toUserId: 'u1',
+          toUserName: 'Maya Chen',
+          note: 'Working a late shift',
+          requestedAt: '2026-06-23T20:30:00.000',
+        ),
+      ];
+
+  static List<MaintenanceContact> maintenanceContacts() => [
+        MaintenanceContact(
+          id: 'mc1',
+          name: 'Emergency services',
+          category: 'emergency',
+          phone: '000',
+          notes: 'Police, fire, ambulance. For life-threatening situations only.',
+          addedBy: 'u1',
+          addedAt: '2026-01-01T00:00:00.000',
+        ),
+        MaintenanceContact(
+          id: 'mc2',
+          name: 'SES (State Emergency Service)',
+          category: 'emergency',
+          phone: '132 500',
+          notes: 'Flood, storm, tree damage. Available 24/7.',
+          addedBy: 'u1',
+          addedAt: '2026-01-01T00:00:00.000',
+        ),
+        MaintenanceContact(
+          id: 'mc3',
+          name: 'Harbourside Property Group',
+          category: 'property',
+          phone: '02 9555 1200',
+          email: 'lettings@harbourside.com.au',
+          notes: 'Our property management agency. For lease queries, inspections, and urgent repairs.',
+          addedBy: 'u1',
+          addedAt: '2026-01-01T00:00:00.000',
+        ),
+        MaintenanceContact(
+          id: 'mc4',
+          name: 'Jake\'s Plumbing',
+          category: 'trades',
+          phone: '0412 334 501',
+          email: 'jake@jakesplumbing.com.au',
+          notes: 'Our go-to plumber. Available Mon–Sat. Call before 5 pm.',
+          addedBy: 'u1',
+          addedAt: '2026-01-01T00:00:00.000',
+        ),
+        MaintenanceContact(
+          id: 'mc5',
+          name: 'Bright Spark Electrical',
+          category: 'trades',
+          phone: '0421 778 922',
+          notes: 'Licensed electrician. Mention "Homies resident" for priority booking.',
+          addedBy: 'u1',
+          addedAt: '2026-01-01T00:00:00.000',
+        ),
+        MaintenanceContact(
+          id: 'mc6',
+          name: 'Origin Energy (Gas)',
+          category: 'utilities',
+          phone: '132 461',
+          email: 'help@originenergy.com.au',
+          notes: 'Account #: 8842-7713. For gas outages or billing queries.',
+          addedBy: 'u1',
+          addedAt: '2026-01-01T00:00:00.000',
+        ),
+        MaintenanceContact(
+          id: 'mc7',
+          name: 'Sydney Water',
+          category: 'utilities',
+          phone: '13 20 92',
+          notes: 'Report water outages or leaks. Available 24/7.',
+          addedBy: 'u1',
+          addedAt: '2026-01-01T00:00:00.000',
+        ),
+        MaintenanceContact(
+          id: 'mc8',
+          name: 'Aussie Broadband (NBN)',
+          category: 'utilities',
+          phone: '1300 880 905',
+          notes: 'Our internet provider. Account under Maya Chen. Reference: ABB-449821.',
+          addedBy: 'u1',
+          addedAt: '2026-01-01T00:00:00.000',
+        ),
+      ];
+
+  static WelcomeGuide welcomeGuide() => WelcomeGuide(
+        message:
+            "Welcome to our home! We're so glad you're here. This guide has everything you need to settle in — read through at your own pace, and don't hesitate to ask any of us if you have questions.",
+        sections: [
+          WelcomeSection(
+            id: 'wg1',
+            icon: '📶',
+            title: 'WiFi',
+            content: 'Network: Homies5G\nPassword: welcome2024!\n\nThere\'s also a guest network (Homies-Guest, no password) for visitors.',
+          ),
+          WelcomeSection(
+            id: 'wg2',
+            icon: '🗑️',
+            title: 'Bins & recycling',
+            content: 'Yellow lid (recycling) goes out Sunday night.\nGreen lid (general waste) goes out every second Sunday.\n\nPlease rinse containers before recycling. No food scraps in the yellow bin.',
+          ),
+          WelcomeSection(
+            id: 'wg3',
+            icon: '🚗',
+            title: 'Parking',
+            content: 'One spot per room in the driveway — first in, first served.\nVisitors can park on the street (free, 2-hour limit on weekdays).',
+          ),
+          WelcomeSection(
+            id: 'wg4',
+            icon: '🔑',
+            title: 'Keys & access',
+            content: 'You\'ve been given 2 keys. Please don\'t copy them without asking.\nFront door code: 4821. Always double-lock the deadbolt when leaving.',
+          ),
+          WelcomeSection(
+            id: 'wg5',
+            icon: '🛒',
+            title: 'Nearby shops',
+            content: 'Woolworths — 5 min walk on King St (open 7am–9pm).\n7-Eleven — 2 min on Park Ave (24h).\nFarmers market — every Saturday 8am–1pm on Wilson Square.',
+          ),
+          WelcomeSection(
+            id: 'wg6',
+            icon: '🚌',
+            title: 'Getting around',
+            content: 'Bus stop (Route 412 → City) — 2 min walk at the corner.\nCentral Station — 10 min on the 412.\nUber/Lyft pickup works well on King St.',
+          ),
+        ],
+      );
+
+  static List<ShoppingItem> shoppingList() => [
+        ShoppingItem(id: 'si1', text: 'Milk (2L)', addedBy: 'u3', addedByName: 'Priya Sharma', addedAt: '2026-06-24T08:00:00.000'),
+        ShoppingItem(id: 'si2', text: 'Bread', addedBy: 'u4', addedByName: 'Tom Becker', addedAt: '2026-06-24T09:30:00.000'),
+        ShoppingItem(id: 'si3', text: 'Coffee beans', addedBy: 'u2', addedByName: 'Daniel Okafor', addedAt: '2026-06-23T21:00:00.000'),
+        ShoppingItem(id: 'si4', text: 'Toilet paper (12-pack)', addedBy: 'u1', addedByName: 'Maya Chen', addedAt: '2026-06-23T20:15:00.000'),
+        ShoppingItem(
+          id: 'si5',
+          text: 'Dish soap',
+          addedBy: 'u1',
+          addedByName: 'Maya Chen',
+          addedAt: '2026-06-22T15:00:00.000',
+          done: true,
+          doneBy: 'u2',
+          doneByName: 'Daniel Okafor',
+          doneAt: '2026-06-23T11:30:00.000',
+        ),
+      ];
 }

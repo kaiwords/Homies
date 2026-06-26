@@ -34,7 +34,9 @@ class HomiesState extends ChangeNotifier {
   List<CleaningRosterEntry> cleaningRoster = SeedData.roster();
   List<CleaningTask> cleaningTasks = SeedData.tasks();
   List<CleaningDayAvailability> cleaningAvailability = [];
+  List<ChoreSwapRequest> choreSwaps = SeedData.choreSwaps();
   List<RentShare> rentShares = [];
+  List<RentPayment> rentPayments = SeedData.rentPayments();
   List<Party> parties = SeedData.parties();
   Messages messages = SeedData.messages();
   List<Complaint> complaints = SeedData.complaints();
@@ -45,6 +47,12 @@ class HomiesState extends ChangeNotifier {
   List<ListingInterest> listingInterests = SeedData.listingInterests();
   List<Inspection> inspections = SeedData.inspections();
   List<PostMessage> postMessages = SeedData.postMessages();
+  List<PersonalExpense> personalExpenses = SeedData.personalExpenses();
+  List<MaintenanceContact> maintenanceContacts = SeedData.maintenanceContacts();
+  List<ShoppingItem> shoppingList = SeedData.shoppingList();
+  WelcomeGuide welcomeGuide = SeedData.welcomeGuide();
+  NotificationPrefs notifPrefs = NotificationPrefs();
+  List<CalendarNote> calendarNotes = [];
 
   StreamSubscription<fb.User?>? _authSub;
 
@@ -73,7 +81,9 @@ class HomiesState extends ChangeNotifier {
         cleaningRoster = ((j['cleaningRoster'] as List?) ?? []).map((e) => CleaningRosterEntry.fromJson(e as Map<String, dynamic>)).toList();
         cleaningTasks = ((j['cleaningTasks'] as List?) ?? []).map((e) => CleaningTask.fromJson(e as Map<String, dynamic>)).toList();
         cleaningAvailability = ((j['cleaningAvailability'] as List?) ?? []).map((e) => CleaningDayAvailability.fromJson(e as Map<String, dynamic>)).toList();
+        choreSwaps = ((j['choreSwaps'] as List?) ?? []).map((e) => ChoreSwapRequest.fromJson(e as Map<String, dynamic>)).toList();
         rentShares = ((j['rentShares'] as List?) ?? []).map((e) => RentShare.fromJson(e as Map<String, dynamic>)).toList();
+        rentPayments = ((j['rentPayments'] as List?) ?? []).map((e) => RentPayment.fromJson(e as Map<String, dynamic>)).toList();
         parties = ((j['parties'] as List?) ?? []).map((e) => Party.fromJson(e as Map<String, dynamic>)).toList();
         messages = j['messages'] != null ? Messages.fromJson(j['messages'] as Map<String, dynamic>) : messages;
         complaints = ((j['complaints'] as List?) ?? []).map((e) => Complaint.fromJson(e as Map<String, dynamic>)).toList();
@@ -90,6 +100,12 @@ class HomiesState extends ChangeNotifier {
         final loadedPMs = ((j['postMessages'] as List?) ?? []).map((e) => PostMessage.fromJson(e as Map<String, dynamic>)).toList();
         final pmIds = loadedPMs.map((m) => m.id).toSet();
         postMessages = [...loadedPMs, ...SeedData.postMessages().where((m) => !pmIds.contains(m.id))];
+        personalExpenses = ((j['personalExpenses'] as List?) ?? []).map((e) => PersonalExpense.fromJson(e as Map<String, dynamic>)).toList();
+        maintenanceContacts = ((j['maintenanceContacts'] as List?) ?? SeedData.maintenanceContacts().map((c) => c.toJson()).toList()).map((e) => MaintenanceContact.fromJson(e as Map<String, dynamic>)).toList();
+        shoppingList = ((j['shoppingList'] as List?) ?? []).map((e) => ShoppingItem.fromJson(e as Map<String, dynamic>)).toList();
+        if (j['welcomeGuide'] != null) welcomeGuide = WelcomeGuide.fromJson(j['welcomeGuide'] as Map<String, dynamic>);
+        if (j['notifPrefs'] != null) notifPrefs = NotificationPrefs.fromJson(j['notifPrefs'] as Map<String, dynamic>);
+        calendarNotes = ((j['calendarNotes'] as List?) ?? []).map((e) => CalendarNote.fromJson(e as Map<String, dynamic>)).toList();
         notifyListeners();
       } catch (e) {
         if (kDebugMode) {
@@ -292,7 +308,9 @@ class HomiesState extends ChangeNotifier {
       'cleaningRoster': cleaningRoster.map((r) => r.toJson()).toList(),
       'cleaningTasks': cleaningTasks.map((t) => t.toJson()).toList(),
       'cleaningAvailability': cleaningAvailability.map((a) => a.toJson()).toList(),
+      'choreSwaps': choreSwaps.map((r) => r.toJson()).toList(),
       'rentShares': rentShares.map((r) => r.toJson()).toList(),
+      'rentPayments': rentPayments.map((p) => p.toJson()).toList(),
       'parties': parties.map((p) => p.toJson()).toList(),
       'messages': messages.toJson(),
       'complaints': complaints.map((c) => c.toJson()).toList(),
@@ -303,6 +321,12 @@ class HomiesState extends ChangeNotifier {
       'listingInterests': listingInterests.map((i) => i.toJson()).toList(),
       'inspections': inspections.map((i) => i.toJson()).toList(),
       'postMessages': postMessages.map((m) => m.toJson()).toList(),
+      'personalExpenses': personalExpenses.map((e) => e.toJson()).toList(),
+      'maintenanceContacts': maintenanceContacts.map((c) => c.toJson()).toList(),
+      'shoppingList': shoppingList.map((i) => i.toJson()).toList(),
+      'welcomeGuide': welcomeGuide.toJson(),
+      'notifPrefs': notifPrefs.toJson(),
+      'calendarNotes': calendarNotes.map((n) => n.toJson()).toList(),
     };
     await prefs.setString(_storageKey, jsonEncode(j));
   }
@@ -327,7 +351,9 @@ class HomiesState extends ChangeNotifier {
     cleaningRoster = SeedData.roster();
     cleaningTasks = SeedData.tasks();
     cleaningAvailability = [];
+    choreSwaps = SeedData.choreSwaps();
     rentShares = [];
+    rentPayments = SeedData.rentPayments();
     parties = SeedData.parties();
     messages = SeedData.messages();
     complaints = SeedData.complaints();
@@ -338,6 +364,11 @@ class HomiesState extends ChangeNotifier {
     listingInterests = SeedData.listingInterests();
     inspections = SeedData.inspections();
     postMessages = SeedData.postMessages();
+    personalExpenses = SeedData.personalExpenses();
+    maintenanceContacts = SeedData.maintenanceContacts();
+    shoppingList = SeedData.shoppingList();
+    welcomeGuide = SeedData.welcomeGuide();
+    notifPrefs = NotificationPrefs();
     notifyListeners();
     _persist();
   }

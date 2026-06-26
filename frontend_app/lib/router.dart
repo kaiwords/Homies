@@ -19,7 +19,14 @@ import 'screens/leaving.dart';
 import 'screens/listings.dart';
 import 'screens/login.dart';
 import 'screens/messages.dart';
+import 'screens/calendar.dart';
+import 'screens/my_spending.dart';
 import 'screens/necessities.dart';
+import 'screens/export.dart';
+import 'screens/maintenance_contacts.dart';
+import 'screens/welcome_guide.dart';
+import 'screens/notifications.dart';
+import 'screens/shopping_list.dart';
 import 'screens/parties.dart';
 import 'screens/profile.dart';
 import 'screens/property.dart';
@@ -91,6 +98,13 @@ GoRouter buildRouter(HomiesState state) {
           GoRoute(path: '/app/issues', builder: (_, __) => const IssuesScreen()),
           GoRoute(path: '/app/complaints', builder: (_, __) => const ComplaintsScreen()),
           GoRoute(path: '/app/finance', builder: (_, __) => const FinanceScreen()),
+          GoRoute(path: '/app/my-spending', builder: (_, __) => const MySpendingScreen()),
+          GoRoute(path: '/app/shopping', builder: (_, s) => const ShoppingListScreen()),
+          GoRoute(path: '/app/notifications', builder: (_, s) => const NotificationsScreen()),
+          GoRoute(path: '/app/calendar', builder: (_, s) => const CalendarScreen()),
+          GoRoute(path: '/app/export', builder: (_, __) => const ExportScreen()),
+          GoRoute(path: '/app/maintenance', builder: (_, __) => const MaintenanceContactsScreen()),
+          GoRoute(path: '/app/welcome-guide', builder: (_, __) => const WelcomeGuideScreen()),
           GoRoute(path: '/app/leaving', builder: (_, __) => const LeavingScreen()),
           GoRoute(path: '/app/termination', builder: (_, __) => const TerminationScreen()),
         ],

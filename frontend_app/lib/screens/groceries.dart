@@ -104,15 +104,33 @@ class _GroceryModalState extends State<_GroceryModal> {
 
   void _save() {
     final total = double.tryParse(totalCtrl.text) ?? 0;
+    if (mode == 'individual') {
+      final uid = state.currentUser!.id;
+      state.mutate(() {
+        state.personalExpenses.add(PersonalExpense(
+          id: 'pe-${DateTime.now().millisecondsSinceEpoch}',
+          userId: uid,
+          category: 'grocery',
+          title: titleCtrl.text.trim(),
+          amount: total,
+          date: todayIso(),
+        ));
+      });
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Added to your personal spending')),
+      );
+      return;
+    }
     final arr = equalSplit(total, participants.length);
-    final shares = mode == 'shared' ? {for (var i = 0; i < participants.length; i++) participants[i]: arr[i]} : <String, double>{};
+    final shares = {for (var i = 0; i < participants.length; i++) participants[i]: arr[i]};
     state.mutate(() {
       state.groceries.insert(0, Grocery(
         id: 'g-${Random().nextInt(0xFFFF).toRadixString(36)}',
         title: titleCtrl.text.trim(),
         total: total,
         payer: payer ?? state.currentUser!.id,
-        mode: mode,
+        mode: 'shared',
         shares: shares,
         date: todayIso(),
         receipt: receipt,
@@ -138,26 +156,48 @@ class _GroceryModalState extends State<_GroceryModal> {
             Row(children: [
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const FieldLabel('Total'),
-                TextField(controller: totalCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true)),
+                TextField(controller: totalCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), onChanged: (_) => setState(() {})),
               ])),
-              const SizedBox(width: 10),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const FieldLabel('Paid by'),
-                DropdownButtonFormField<String>(
-                  initialValue: payer,
-                  items: [for (final u in hms) DropdownMenuItem(value: u.id, child: Text(u.name))],
-                  onChanged: (v) => setState(() => payer = v),
-                ),
-              ])),
+              if (mode == 'shared') ...[
+                const SizedBox(width: 10),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const FieldLabel('Paid by'),
+                  DropdownButtonFormField<String>(
+                    initialValue: payer,
+                    items: [for (final u in hms) DropdownMenuItem(value: u.id, child: Text(u.name))],
+                    onChanged: (v) => setState(() => payer = v),
+                  ),
+                ])),
+              ],
             ]),
             const SizedBox(height: 10),
-            const FieldLabel('Mode'),
+            const FieldLabel('Who is this for?'),
             Segment<String>(
               options: const ['shared', 'individual'],
               value: mode,
-              labelFor: (v) => v == 'shared' ? 'Shared (split)' : 'Individual',
+              labelFor: (v) => v == 'shared' ? 'Shared with housemates' : 'Just me',
               onChanged: (v) => setState(() => mode = v),
             ),
+            if (mode == 'individual') ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: HomiesColors.accentSoft,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(children: [
+                  Icon(Icons.person_outlined, size: 15, color: HomiesColors.accentStrong),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'This will be saved directly to your personal spending — not visible to housemates.',
+                      style: TextStyle(fontSize: 12, color: HomiesColors.accentStrong),
+                    ),
+                  ),
+                ]),
+              ),
+            ],
             if (mode == 'shared') ...[
               const SizedBox(height: 10),
               const FieldLabel('Split between'),

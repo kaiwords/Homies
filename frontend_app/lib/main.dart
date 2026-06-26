@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import 'firebase_options.dart';
 import 'router.dart';
+import 'services/notification_service.dart';
 import 'state/app_state.dart';
 import 'theme.dart';
 
@@ -13,10 +14,12 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  await NotificationService.init();
   Intl.defaultLocale = 'en_AU';
   await initializeDateFormatting('en_AU', null);
   final state = HomiesState();
   await state.load();
+  await NotificationService.scheduleFromState(state);
   runApp(HomiesApp(state: state));
 }
 

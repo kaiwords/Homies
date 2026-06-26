@@ -103,6 +103,7 @@ class _CleaningScreenState extends State<CleaningScreen> {
             ]),
           ),
           if (!isLeaseholder) _TenantAvailabilityCard(userId: cu.id),
+          const _SwapRequestsCard(),
           HomiesCard(
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               const Text('Tasks', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
@@ -250,7 +251,7 @@ class _TaskRow extends StatelessWidget {
             if (isMine && !task.done)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
-                child: Row(children: [
+                child: Wrap(spacing: 6, runSpacing: 6, children: [
                   OutlinedButton(
                     onPressed: () async {
                       final ctrl = TextEditingController();
@@ -271,7 +272,6 @@ class _TaskRow extends StatelessWidget {
                     },
                     child: const Text("Can't do it"),
                   ),
-                  const SizedBox(width: 6),
                   OutlinedButton(
                     onPressed: () => showModalBottomSheet(
                       context: context,
@@ -298,6 +298,15 @@ class _TaskRow extends StatelessWidget {
                       ),
                     ),
                     child: const Text('📷 Photo proof'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (_) => _SwapSheet(task: task),
+                    ),
+                    icon: const Icon(Icons.swap_horiz_rounded, size: 14),
+                    label: const Text('Swap'),
                   ),
                 ]),
               ),
@@ -652,6 +661,261 @@ class _DayToggle extends StatelessWidget {
         ),
         child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
       ),
+    );
+  }
+}
+
+// ── Chore swap request widgets ───────────────────────────────────────────────
+
+class _SwapRequestsCard extends StatelessWidget {
+  const _SwapRequestsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final cu = state.currentUser!;
+
+    final incoming = state.choreSwaps
+        .where((r) =>
+            r.status == 'pending' &&
+            r.fromUserId != cu.id &&
+            (r.toUserId == null || r.toUserId == cu.id))
+        .toList();
+
+    final mine = state.choreSwaps
+        .where((r) => r.status == 'pending' && r.fromUserId == cu.id)
+        .toList();
+
+    if (incoming.isEmpty && mine.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: HomiesCard(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Text('Swap requests', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          if (incoming.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            const Text('NEEDS YOUR RESPONSE',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: HomiesColors.textFaint, letterSpacing: 0.8)),
+            const SizedBox(height: 6),
+            for (final r in incoming) _IncomingSwapTile(request: r),
+          ],
+          if (mine.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            const Text('YOUR REQUESTS',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: HomiesColors.textFaint, letterSpacing: 0.8)),
+            const SizedBox(height: 6),
+            for (final r in mine) _MySwapTile(request: r),
+          ],
+        ]),
+      ),
+    );
+  }
+}
+
+class _IncomingSwapTile extends StatelessWidget {
+  final ChoreSwapRequest request;
+  const _IncomingSwapTile({required this.request});
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final cu = state.currentUser!;
+    final task = state.cleaningTasks.firstWhereOrNull((t) => t.id == request.taskId);
+    final requester = state.activeHousemates.firstWhereOrNull((u) => u.id == request.fromUserId);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.07),
+        border: Border.all(color: Colors.amber.withValues(alpha: 0.45)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          if (requester != null) Avatar.sm(requester),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(request.fromUserName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              Text(
+                'wants to swap: ${task?.task ?? 'Unknown task'}',
+                style: const TextStyle(fontSize: 12, color: HomiesColors.textDim),
+              ),
+              if (task != null)
+                Text('Due ${fmtDate(task.dueDate)}',
+                    style: const TextStyle(fontSize: 11, color: HomiesColors.textFaint)),
+            ]),
+          ),
+        ]),
+        if (request.note != null && request.note!.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text('"${request.note}"',
+              style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 12, color: HomiesColors.textDim)),
+        ],
+        const SizedBox(height: 8),
+        Row(children: [
+          OutlinedButton(
+            onPressed: () => state.mutate(() {
+              request.status = 'declined';
+              request.respondedAt = DateTime.now().toIso8601String();
+              request.respondedBy = cu.id;
+              request.respondedByName = cu.name;
+            }),
+            child: const Text('Decline'),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: () => state.mutate(() {
+              request.status = 'accepted';
+              request.respondedAt = DateTime.now().toIso8601String();
+              request.respondedBy = cu.id;
+              request.respondedByName = cu.name;
+              if (task != null) task.assignee = cu.id;
+              for (final other in state.choreSwaps) {
+                if (other.id != request.id &&
+                    other.taskId == request.taskId &&
+                    other.status == 'pending') {
+                  other.status = 'cancelled';
+                }
+              }
+            }),
+            child: const Text('Accept'),
+          ),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _MySwapTile extends StatelessWidget {
+  final ChoreSwapRequest request;
+  const _MySwapTile({required this.request});
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final task = state.cleaningTasks.firstWhereOrNull((t) => t.id == request.taskId);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: HomiesColors.surface2,
+        border: Border.all(color: HomiesColors.border),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(task?.task ?? 'Unknown task',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            Text(
+              request.toUserId == null ? 'Open to anyone' : 'Directed at ${request.toUserName ?? ''}',
+              style: const TextStyle(fontSize: 12, color: HomiesColors.textDim),
+            ),
+            if (request.note != null && request.note!.isNotEmpty)
+              Text('"${request.note}"',
+                  style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 11, color: HomiesColors.textFaint)),
+          ]),
+        ),
+        const SizedBox(width: 8),
+        TextButton(
+          onPressed: () => state.mutate(() => request.status = 'cancelled'),
+          child: const Text('Cancel', style: TextStyle(color: HomiesColors.danger)),
+        ),
+      ]),
+    );
+  }
+}
+
+class _SwapSheet extends StatefulWidget {
+  final CleaningTask task;
+  const _SwapSheet({required this.task});
+
+  @override
+  State<_SwapSheet> createState() => _SwapSheetState();
+}
+
+class _SwapSheetState extends State<_SwapSheet> {
+  String? toUserId;
+  String? toUserName;
+  final _noteCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final cu = state.currentUser!;
+    final others = state.activeHousemates.where((u) => u.id != cu.id).toList();
+
+    final alreadyPending = state.choreSwaps.any(
+      (r) => r.taskId == widget.task.id && r.fromUserId == cu.id && r.status == 'pending',
+    );
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 20, 16, MediaQuery.of(context).viewInsets.bottom + 20),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Expanded(
+            child: Text(
+              'Request swap: ${widget.task.task}',
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            ),
+          ),
+          IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+        ]),
+        const SizedBox(height: 14),
+        if (alreadyPending)
+          const Text('You already have a pending swap request for this task.',
+              style: TextStyle(color: HomiesColors.textDim))
+        else ...[
+          const FieldLabel('Ask who?'),
+          DropdownButtonFormField<String?>(
+            initialValue: toUserId,
+            items: [
+              const DropdownMenuItem(value: null, child: Text('Anyone (open request)')),
+              for (final u in others) DropdownMenuItem(value: u.id, child: Text(u.name)),
+            ],
+            onChanged: (v) => setState(() {
+              toUserId = v;
+              toUserName = v == null ? null : others.firstWhere((u) => u.id == v).name;
+            }),
+          ),
+          const SizedBox(height: 10),
+          const FieldLabel('Note (optional)'),
+          TextField(
+            controller: _noteCtrl,
+            decoration: const InputDecoration(hintText: "e.g. I'll be out of town"),
+            maxLines: 2,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () {
+              state.mutate(() {
+                state.choreSwaps.add(ChoreSwapRequest(
+                  id: 'sw-${Random().nextInt(0xFFFF).toRadixString(36)}',
+                  taskId: widget.task.id,
+                  fromUserId: cu.id,
+                  fromUserName: cu.name,
+                  toUserId: toUserId,
+                  toUserName: toUserName,
+                  note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+                  requestedAt: DateTime.now().toIso8601String(),
+                ));
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Send request'),
+          ),
+        ],
+      ]),
     );
   }
 }

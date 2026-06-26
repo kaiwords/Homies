@@ -18,17 +18,22 @@ class NavSection {
 const navSections = <NavSection>[
   NavSection('/app', 'Dashboard', Icons.home_outlined, 'primary'),
   NavSection('/app/profile', 'Your profile', Icons.badge_outlined, 'primary'),
+  NavSection('/app/calendar', 'Calendar', Icons.calendar_month_outlined, 'primary'),
   NavSection('/app/property', 'Property & lease', Icons.description_outlined, 'primary'),
   NavSection('/app/housemates', 'Housemates', Icons.people_outline, 'primary'),
   NavSection('/app/performance', 'Tenant performance', Icons.insights_outlined, 'primary', leaseholderOnly: true),
   NavSection('/app/finance', 'Finance', Icons.account_balance_wallet_outlined, 'money'),
+  NavSection('/app/my-spending', 'My spending', Icons.person_outlined, 'money'),
   NavSection('/app/bills', 'Bills', Icons.receipt_long_outlined, 'money'),
   NavSection('/app/subscriptions', 'Subscriptions', Icons.subscriptions_outlined, 'money'),
   NavSection('/app/groceries', 'Groceries', Icons.shopping_cart_outlined, 'money'),
   NavSection('/app/necessities', 'Necessities', Icons.cleaning_services_outlined, 'money'),
+  NavSection('/app/export', 'Export data', Icons.download_outlined, 'money'),
+  NavSection('/app/welcome-guide', 'Welcome guide', Icons.waving_hand_outlined, 'living'),
   NavSection('/app/cleaning', 'Cleaning', Icons.cleaning_services_outlined, 'living'),
   NavSection('/app/rules', 'House rules', Icons.gavel_outlined, 'living'),
   NavSection('/app/parties', 'Parties', Icons.celebration_outlined, 'living'),
+  NavSection('/app/maintenance', 'Maintenance contacts', Icons.contact_phone_outlined, 'living'),
   NavSection('/app/issues', 'House issues', Icons.build_outlined, 'living'),
   NavSection('/app/complaints', 'Complaints', Icons.flag_outlined, 'living'),
   NavSection('/app/listings', 'Rooms & housemates', Icons.storefront_outlined, 'marketplace'),
@@ -78,6 +83,16 @@ class AppShell extends StatelessWidget {
     final activeCount = state.activeHousemates.length;
     final pendingComplaints = state.complaints.where((c) => c.status == 'open').length;
     final pendingTasks = state.cleaningTasks.where((t) => !t.done && (t.excuse == null || t.excuse!.isEmpty)).length;
+    final uid = state.currentUser!.id;
+    final now = DateTime.now();
+    final upcomingBills = state.bills.where((b) {
+      if (b.paidBy[uid] == true) return false;
+      final due = DateTime.tryParse(b.dueDate);
+      if (due == null) return false;
+      return due.isAfter(now.subtract(const Duration(days: 1))) &&
+          due.isBefore(now.add(const Duration(days: 8)));
+    }).length;
+    final notifCount = pendingTasks + upcomingBills;
 
     return Scaffold(
       appBar: AppBar(
@@ -94,6 +109,32 @@ class AppShell extends StatelessWidget {
           ],
         ),
         actions: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_outlined),
+                tooltip: 'Notifications',
+                onPressed: () => context.go('/app/notifications'),
+              ),
+              if (notifCount > 0)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: HomiesColors.danger,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '$notifCount',
+                      style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+            ],
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: PopupMenuButton<String>(
