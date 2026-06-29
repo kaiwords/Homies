@@ -255,21 +255,6 @@
   border-radius: 999px;
 }
 
-/* ── Mobile-only banner ── */
-.lp-banner {
-  background: var(--accent-soft);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  padding: 18px 0;
-}
-
-.lp-banner p {
-  margin: 0;
-  text-align: center;
-  font-size: 15px;
-  color: var(--accent-strong);
-}
-
 /* ── Section heads ── */
 .lp-section-head {
   text-align: center;
@@ -400,6 +385,21 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+}
+
+.lp-footer-links {
+  display: flex;
+  gap: 20px;
+}
+
+.lp-footer-links a {
+  font-size: 13px;
+  color: var(--text-dim);
+  text-decoration: none;
+}
+
+.lp-footer-links a:hover {
+  color: var(--text);
 }
 
 .lp-footer-copy {

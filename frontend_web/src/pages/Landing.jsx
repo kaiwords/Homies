@@ -1,19 +1,18 @@
 import './Landing.css'
 
-// ── Replace these with your real store URLs once the apps are published ──
-const APP_STORE_URL = '#'
-const PLAY_STORE_URL = '#'
+// ── Update this once your App Store listing is live ──────────────────────────
+const APP_STORE_URL = 'https://apps.apple.com/app/id6781926631'
 
 const FEATURES = [
   {
-    icon: '💡',
-    title: 'Bills & bond',
-    body: 'Split utilities fairly, track who has paid, and prorate by move-in date — no spreadsheets, no awkward chases.',
+    icon: '💸',
+    title: 'Bills & rent',
+    body: 'Split utilities and rent fairly, track who has paid, and keep a clear record — no spreadsheets, no awkward chases.',
   },
   {
     icon: '🧹',
     title: 'Chores & cleaning',
-    body: 'A rolling roster with photo proof and a paper trail, so everyone pulls their weight.',
+    body: 'A rolling roster with swap requests, appliance booking and photo proof so everyone pulls their weight.',
   },
   {
     icon: '🛒',
@@ -27,8 +26,8 @@ const FEATURES = [
   },
   {
     icon: '💬',
-    title: 'House messages',
-    body: 'One group chat for the whole house. Keep plans, reminders and decisions in one place.',
+    title: 'House chat',
+    body: 'Group chat with pinned announcements, polls, photos and voice messages. Everything in one place.',
   },
   {
     icon: '🎉',
@@ -42,32 +41,25 @@ const FEATURES = [
   },
   {
     icon: '🚪',
-    title: 'Move out, cleanly',
-    body: 'Two-week notice, bond release and deductions all explained — leave without the drama.',
+    title: 'Move in & out',
+    body: 'Condition checklists, bond tracking, two-week notice and deductions all in one place — leave without the drama.',
   },
 ]
 
 const STEPS = [
-  { n: '1', title: 'Download the app', body: 'Grab Homies from the App Store or Google Play.' },
-  { n: '2', title: 'Set up your house', body: 'Create your sharehouse or join with an invite link.' },
+  { n: '1', title: 'Download the app', body: 'Grab Leasely from the App Store — free to download.' },
+  { n: '2', title: 'Set up your house', body: 'Create your sharehouse or join with an invite code from your leaseholder.' },
   { n: '3', title: 'Run it together', body: 'Split bills, share chores and keep everyone on the same page.' },
 ]
 
-function StoreBadges({ size = 'lg' }) {
+function AppStoreBadge({ size = 'lg' }) {
   return (
     <div className={`store-badges ${size}`}>
-      <a className="store-badge" href={APP_STORE_URL} aria-label="Download on the App Store">
+      <a className="store-badge" href={APP_STORE_URL} target="_blank" rel="noopener noreferrer" aria-label="Download on the App Store">
         <span className="store-badge-icon"></span>
         <span className="store-badge-text">
           <small>Download on the</small>
           <strong>App Store</strong>
-        </span>
-      </a>
-      <a className="store-badge" href={PLAY_STORE_URL} aria-label="Get it on Google Play">
-        <span className="store-badge-icon">▶</span>
-        <span className="store-badge-text">
-          <small>Get it on</small>
-          <strong>Google Play</strong>
         </span>
       </a>
     </div>
@@ -95,15 +87,15 @@ export function Landing() {
       <section className="lp-hero" id="top">
         <div className="lp-container lp-hero-inner">
           <div className="lp-hero-copy">
-            <span className="lp-pill">📱 Mobile app</span>
+            <span className="lp-pill">🍎 Now on the App Store</span>
             <h1>Run a sharehouse without the spreadsheets.</h1>
             <p className="lp-lead">
               Bills, bond, chores, groceries, parties, complaints — one place,
               fair splits, less drama. Homies keeps your whole house on the
               same page.
             </p>
-            <StoreBadges />
-            <p className="lp-note">Free to download · Available on iOS &amp; Android</p>
+            <AppStoreBadge />
+            <p className="lp-note">Free to download · iOS</p>
           </div>
 
           <div className="lp-hero-art">
@@ -126,7 +118,7 @@ export function Landing() {
                     <span>🧹 Kitchen clean</span>
                     <span className="lp-screen-chip">Due today</span>
                   </div>
-                  <div className="lp-screen-meta">Assigned to Sam</div>
+                  <div className="lp-screen-meta">Assigned to Alex</div>
                 </div>
                 <div className="lp-screen-card">
                   <div className="lp-screen-row">
@@ -138,17 +130,6 @@ export function Landing() {
               </div>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* ── Mobile-only notice ── */}
-      <section className="lp-banner">
-        <div className="lp-container">
-          <p>
-            <strong>Homies lives on your phone.</strong> This website is just an
-            overview — to create your house, split bills and chat with your
-            housemates, download the mobile app below.
-          </p>
         </div>
       </section>
 
@@ -194,8 +175,8 @@ export function Landing() {
       <section className="lp-cta" id="get">
         <div className="lp-container lp-cta-inner">
           <h2>Get Homies on your phone</h2>
-          <p>Download free and bring calm to your sharehouse today.</p>
-          <StoreBadges />
+          <p>Download free on iOS and bring calm to your sharehouse today.</p>
+          <AppStoreBadge />
         </div>
       </section>
 
@@ -205,6 +186,10 @@ export function Landing() {
           <span className="lp-brand">
             <span className="lp-brand-dot" /> homies
           </span>
+          <nav className="lp-footer-links">
+            <a href="mailto:support@homiesapp.com">Contact</a>
+            <a href="/privacy">Privacy policy</a>
+          </nav>
           <span className="lp-footer-copy">
             © {new Date().getFullYear()} Homies. All rights reserved.
           </span>
