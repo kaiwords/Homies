@@ -41,6 +41,8 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Homies uses your location to help identify your property address during setup.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Homies needs camera access so you can take photos and record videos to share in chat.</string>
 	<key>NSMicrophoneUsageDescription</key>
