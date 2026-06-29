@@ -388,8 +388,27 @@ class _MessagesScreenState extends State<MessagesScreen> {
     );
   }
 
+  bool _isQuietHours(String start, String end) {
+    final now = DateTime.now();
+    final sp = start.split(':');
+    final ep = end.split(':');
+    final sMin = int.parse(sp[0]) * 60 + int.parse(sp[1]);
+    final eMin = int.parse(ep[0]) * 60 + int.parse(ep[1]);
+    final nMin = now.hour * 60 + now.minute;
+    return sMin > eMin ? (nMin >= sMin || nMin < eMin) : (nMin >= sMin && nMin < eMin);
+  }
+
+  void _togglePin(HomiesState state, Message m) {
+    state.mutate(() => m.pinned = !m.pinned);
+  }
+
   Widget _chatColumn(HomiesState state, List<Message> messages, bool isGroup, User cu, List<User> others) {
     final activeUser = isGroup ? null : others.firstWhere((u) => u.id == _activeId, orElse: () => cu);
+    final isLeaseholder = cu.role == 'leaseholder';
+    final terms = state.houseTerms;
+    final quietActive = isGroup && _isQuietHours(terms.quietHoursStart, terms.quietHoursEnd);
+    final pinnedMsgs = isGroup ? messages.where((m) => m.pinned && m.type == 'text').toList() : <Message>[];
+
     return Column(children: [
       Container(
         padding: const EdgeInsets.all(14),
@@ -408,12 +427,81 @@ class _MessagesScreenState extends State<MessagesScreen> {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(isGroup ? 'House group' : activeUser?.name ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
-              Text(isGroup ? '${state.activeHousemates.length} living here' : 'Just the two of you',
-                  style: const TextStyle(color: HomiesColors.textDim, fontSize: 12)),
+              Row(children: [
+                Text(isGroup ? '${state.activeHousemates.length} living here' : 'Just the two of you',
+                    style: const TextStyle(color: HomiesColors.textDim, fontSize: 12)),
+                if (isGroup) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: quietActive ? const Color(0xFFFFF3CD) : HomiesColors.surface2,
+                      border: Border.all(color: quietActive ? const Color(0xFFE0A000) : HomiesColors.border),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.bedtime_outlined, size: 10,
+                          color: quietActive ? const Color(0xFFB07000) : HomiesColors.textFaint),
+                      const SizedBox(width: 3),
+                      Text(
+                        quietActive
+                            ? 'Quiet hours'
+                            : '${terms.quietHoursStart}–${terms.quietHoursEnd}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: quietActive ? const Color(0xFFB07000) : HomiesColors.textFaint,
+                        ),
+                      ),
+                    ]),
+                  ),
+                ],
+              ]),
             ]),
           ),
         ]),
       ),
+      if (pinnedMsgs.isNotEmpty)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: const BoxDecoration(
+            color: Color(0xFFF5F0FF),
+            border: Border(bottom: BorderSide(color: Color(0xFFD0B8F0))),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(children: [
+                Icon(Icons.push_pin_rounded, size: 13, color: Color(0xFF7C4DCC)),
+                SizedBox(width: 4),
+                Text('Pinned', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF7C4DCC))),
+              ]),
+              const SizedBox(height: 4),
+              for (final m in pinnedMsgs)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Row(children: [
+                    Expanded(
+                      child: Text(
+                        m.text,
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF3D2070)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (isLeaseholder)
+                      GestureDetector(
+                        onTap: () => _togglePin(state, m),
+                        child: const Padding(
+                          padding: EdgeInsets.only(left: 8),
+                          child: Icon(Icons.close, size: 14, color: Color(0xFF9E6DCC)),
+                        ),
+                      ),
+                  ]),
+                ),
+            ],
+          ),
+        ),
       Expanded(
         child: messages.isEmpty
             ? Center(
@@ -433,7 +521,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                   final showDay = prev == null || fmtChatDay(prev.at) != fmtChatDay(m.at);
                   return Column(children: [
                     if (showDay) _dayDivider(fmtChatDay(m.at)),
-                    _messageRow(state, m, cu),
+                    _messageRow(state, m, cu, canPin: isGroup && isLeaseholder && m.type == 'text'),
                   ]);
                 },
               ),
@@ -453,7 +541,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
         ),
       );
 
-  Widget _messageRow(HomiesState state, Message m, User cu) {
+  Widget _messageRow(HomiesState state, Message m, User cu, {bool canPin = false}) {
     final mine = m.from == cu.id;
     final sender = state.findUser(m.from);
     final isMedia = m.type == 'image' || m.type == 'video' || m.type == 'voice';
@@ -482,14 +570,21 @@ class _MessagesScreenState extends State<MessagesScreen> {
       } else if (m.type == 'voice' && media != null) {
         content = ChatVoiceBubble(media: media, mine: mine);
       } else {
-        content = Text(m.text, style: TextStyle(color: mine ? Colors.white : HomiesColors.text, fontSize: 14));
+        content = Text(m.text, style: TextStyle(color: mine ? const Color(0xFF1E2A3A) : HomiesColors.text, fontSize: 14));
       }
       bubble = Container(
         padding: m.type == 'image' || m.type == 'video'
             ? const EdgeInsets.all(4)
             : const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         decoration: BoxDecoration(
-          color: mine ? HomiesColors.accent : HomiesColors.surface2,
+          gradient: mine
+              ? const LinearGradient(
+                  colors: [Color(0xFFB3D5FF), Color(0xFFFFB3DA)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: mine ? null : HomiesColors.surface2,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
@@ -508,12 +603,12 @@ class _MessagesScreenState extends State<MessagesScreen> {
           content,
           const SizedBox(height: 3),
           Text(fmtTime(m.at),
-              style: TextStyle(fontSize: 10, color: mine ? Colors.white70 : HomiesColors.textFaint)),
+              style: TextStyle(fontSize: 10, color: mine ? const Color(0xFF4A5E78) : HomiesColors.textFaint)),
         ]),
       );
     }
 
-    return Padding(
+    final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         mainAxisAlignment: mine ? MainAxisAlignment.end : MainAxisAlignment.start,
@@ -525,8 +620,35 @@ class _MessagesScreenState extends State<MessagesScreen> {
             constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
             child: bubble,
           ),
+          if (m.pinned) ...[
+            const SizedBox(width: 4),
+            const Icon(Icons.push_pin_rounded, size: 12, color: Color(0xFF9E6DCC)),
+          ],
         ],
       ),
+    );
+
+    if (!canPin) return row;
+    return GestureDetector(
+      onLongPress: () => showModalBottomSheet(
+        context: context,
+        builder: (_) => SafeArea(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            ListTile(
+              leading: Icon(
+                m.pinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
+                color: const Color(0xFF7C4DCC),
+              ),
+              title: Text(m.pinned ? 'Unpin message' : 'Pin message'),
+              onTap: () {
+                _togglePin(state, m);
+                Navigator.pop(context);
+              },
+            ),
+          ]),
+        ),
+      ),
+      child: row,
     );
   }
 
@@ -678,13 +800,22 @@ class _PollBubbleState extends State<_PollBubble> {
     final mine = widget.mine;
     final isCreator = widget.message.from == widget.currentUserId;
     final totalVotes = poll.votes.values.fold<int>(0, (sum, v) => sum + v.length);
-    final bg = mine ? HomiesColors.accent : HomiesColors.surface2;
-    final fg = mine ? Colors.white : HomiesColors.text;
-    final subFg = mine ? Colors.white70 : HomiesColors.textDim;
+    final fg = mine ? const Color(0xFF1E2A3A) : HomiesColors.text;
+    final subFg = mine ? const Color(0xFF4A5E78) : HomiesColors.textDim;
 
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+      decoration: BoxDecoration(
+        gradient: mine
+            ? const LinearGradient(
+                colors: [Color(0xFFB3D5FF), Color(0xFFFFB3DA)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              )
+            : null,
+        color: mine ? null : HomiesColors.surface2,
+        borderRadius: BorderRadius.circular(14),
+      ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
         if (!mine && widget.senderName != null)
           Text(widget.senderName!,
@@ -725,11 +856,11 @@ class _PollBubbleState extends State<_PollBubble> {
                   contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: mine ? Colors.white54 : HomiesColors.border),
+                    borderSide: BorderSide(color: mine ? const Color(0xFF4A5E78).withValues(alpha: 0.35) : HomiesColors.border),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: mine ? Colors.white54 : HomiesColors.border),
+                    borderSide: BorderSide(color: mine ? const Color(0xFF4A5E78).withValues(alpha: 0.35) : HomiesColors.border),
                   ),
                 ),
                 onSubmitted: (_) => _submitOption(),
@@ -739,7 +870,7 @@ class _PollBubbleState extends State<_PollBubble> {
             const SizedBox(width: 6),
             TextButton(
               onPressed: _newOptionCtrl.text.trim().isEmpty ? null : _submitOption,
-              child: Text('Add', style: TextStyle(color: mine ? Colors.white : HomiesColors.accent)),
+              child: Text('Add', style: TextStyle(color: mine ? const Color(0xFF1E2A3A) : HomiesColors.accent)),
             ),
           ]),
         ],
@@ -777,10 +908,10 @@ class _PollOptionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pct = totalVotes > 0 ? (voters.length / totalVotes) : 0.0;
-    final fg = mine ? Colors.white : HomiesColors.text;
-    final borderColor = mine ? Colors.white54 : HomiesColors.borderStrong;
-    final fillColor = mine ? Colors.white24 : HomiesColors.accentSoft;
-    final bgColor = mine ? Colors.white10 : HomiesColors.surface;
+    final fg = mine ? const Color(0xFF1E2A3A) : HomiesColors.text;
+    final borderColor = mine ? const Color(0xFF4A5E78).withValues(alpha: 0.35) : HomiesColors.borderStrong;
+    final fillColor = mine ? const Color(0xFF1E2A3A).withValues(alpha: 0.12) : HomiesColors.accentSoft;
+    final bgColor = mine ? const Color(0xFF1E2A3A).withValues(alpha: 0.05) : HomiesColors.surface;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Material(

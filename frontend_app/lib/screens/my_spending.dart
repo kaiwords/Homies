@@ -695,7 +695,7 @@ class _AddSheetState extends State<_AddSheet> {
       maxChildSize: 0.95,
       expand: false,
       builder: (_, ctrl) => Padding(
-        padding: EdgeInsets.fromLTRB(16, 8, 16, MediaQuery.of(context).viewInsets.bottom + 24),
+        padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewInsets.bottom + 28),
         child: ListView(controller: ctrl, children: [
           Center(
             child: Container(

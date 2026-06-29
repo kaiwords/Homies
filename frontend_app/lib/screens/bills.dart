@@ -47,7 +47,7 @@ class _BillsScreenState extends State<BillsScreen> {
 
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           PageHead(
             title: 'Bills',
@@ -72,7 +72,7 @@ class _BillsScreenState extends State<BillsScreen> {
           if (_tab == 'bills' && dueSoon.isNotEmpty)
             HomiesCard(
               color: HomiesColors.surface2,
-              borderColor: HomiesColors.accentSoft,
+              borderColor: HomiesColors.accentBorder,
               child: Row(children: [
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -217,10 +217,10 @@ class _BillCard extends StatelessWidget {
             context: context,
             isScrollControlled: true,
             builder: (_) => Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+              padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 24),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 const Text('Attach payment receipt', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
                 FilePickerButton(
                   value: b.receipt,
                   onChanged: (f) {
@@ -570,7 +570,7 @@ class _BillModalState extends State<_BillModal> {
         b.payments = {for (final entry in b.payments.entries) if (shares.containsKey(entry.key)) entry.key: entry.value};
         b.status = shares.keys.isNotEmpty && shares.keys.every((uid) => b.paidBy[uid] == true) ? 'settled' : 'pending';
       } else {
-        state.bills.add(Bill(
+        final newBill = Bill(
           id: 'b-${Random().nextInt(0xFFFF).toRadixString(36)}',
           title: titleCtrl.text.trim(),
           category: category,
@@ -581,7 +581,23 @@ class _BillModalState extends State<_BillModal> {
           issuedBy: state.currentUser?.id ?? 'u1',
           split: split,
           shares: shares,
-        ));
+        );
+        state.bills.add(newBill);
+        // Notify each participant (except the issuer)
+        final issuerId = state.currentUser?.id ?? '';
+        final issuerName = state.currentUser?.name ?? 'Leaseholder';
+        final now = DateTime.now().toIso8601String();
+        for (final entry in shares.entries) {
+          if (entry.key == issuerId) continue;
+          state.appNotifications.insert(0, AppNotification(
+            id: 'bill_new_${newBill.id}_${entry.key}',
+            kind: 'bill_due',
+            title: 'New bill: ${newBill.title}',
+            body: '$issuerName added a ${fmtAUD(newBill.amount)} bill. Your share is ${fmtAUD(entry.value)}, due ${fmtDate(newBill.dueDate)}.',
+            at: now,
+            forUserId: entry.key,
+          ));
+        }
       }
     });
     Navigator.pop(context);
@@ -598,16 +614,16 @@ class _BillModalState extends State<_BillModal> {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
           child: SingleChildScrollView(
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-              Text(isEdit ? 'Edit bill' : 'New bill', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 12),
+              Text(isEdit ? 'Edit bill' : 'New bill', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 20),
               const FieldLabel('Title'),
               TextField(controller: titleCtrl, decoration: const InputDecoration(hintText: 'Electricity — AGL (Dec–Feb)')),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               Row(children: [
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -628,10 +644,10 @@ class _BillModalState extends State<_BillModal> {
                   ]),
                 ),
               ]),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               const FieldLabel('Due date'),
               _dateField(dueDate, (v) => setState(() => dueDate = v)),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   const FieldLabel('Period start (optional)'),
@@ -644,7 +660,7 @@ class _BillModalState extends State<_BillModal> {
                 ])),
               ]),
               const Hint('Required if splitting prorated.'),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               const FieldLabel('Who pays'),
               Wrap(spacing: 6, runSpacing: 4, children: [
                 for (final u in hms)
@@ -660,7 +676,7 @@ class _BillModalState extends State<_BillModal> {
                     }),
                   ),
               ]),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               const FieldLabel('Split method'),
               Segment<String>(
                 options: const ['equal', 'prorated', 'percentage', 'custom'],
@@ -678,7 +694,7 @@ class _BillModalState extends State<_BillModal> {
                 },
               ),
               if (split == 'percentage' || split == 'custom') ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
                 FieldLabel('Per-person ${split == 'percentage' ? '%' : 'amount'}'),
                 for (final id in participants)
                   Padding(
@@ -699,7 +715,7 @@ class _BillModalState extends State<_BillModal> {
                     ]),
                   ),
               ],
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               HomiesCard(
                 color: HomiesColors.surface2,
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -821,27 +837,27 @@ class _ScheduleModalState extends State<_ScheduleModal> {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
           child: SingleChildScrollView(
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
               Text(isEdit ? 'Edit bill schedule' : 'New bill schedule',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
               const Text("Set up a recurring bill. We'll surface it when due and let you record the actual amount + proof.",
-                  style: TextStyle(color: HomiesColors.textDim, fontSize: 12)),
-              const SizedBox(height: 12),
+                  style: TextStyle(color: HomiesColors.textDim, fontSize: 13)),
+              const SizedBox(height: 20),
               const FieldLabel('Title'),
               TextField(controller: titleCtrl, decoration: const InputDecoration(hintText: 'Electricity — AGL'), onChanged: (_) => setState(() {})),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               const FieldLabel('Category'),
               DropdownButtonFormField<String>(
                 initialValue: category,
                 items: [for (final c in _categories) DropdownMenuItem(value: c[0], child: Text(c[1]))],
                 onChanged: (v) => setState(() => category = v ?? 'utility'),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               const FieldLabel('Cadence'),
               DropdownButtonFormField<String>(
                 initialValue: cadence,
@@ -849,14 +865,14 @@ class _ScheduleModalState extends State<_ScheduleModal> {
                 onChanged: (v) => setState(() => cadence = v ?? 'monthly'),
               ),
               if (cadence == 'custom') ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
                 const FieldLabel('Every N days'),
                 TextField(controller: customDaysCtrl, keyboardType: TextInputType.number, onChanged: (_) => setState(() {})),
               ],
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               const FieldLabel('Next due date'),
               _dateField(nextDueDate, (v) => setState(() => nextDueDate = v)),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               const FieldLabel('Estimated amount (optional)'),
               TextField(controller: estimateCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(hintText: '420.00')),
               if (cycleStart != null)
@@ -865,7 +881,7 @@ class _ScheduleModalState extends State<_ScheduleModal> {
                   child: Text('Period for the first invoice: ${fmtDate(cycleStart)} → ${fmtDate(nextDueDate)}',
                       style: const TextStyle(color: HomiesColors.textFaint, fontSize: 12)),
                 ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               const FieldLabel('Default split'),
               Segment<String>(
                 options: const ['equal', 'prorated'],
@@ -874,7 +890,7 @@ class _ScheduleModalState extends State<_ScheduleModal> {
                 onChanged: (v) => setState(() => splitMethod = v),
               ),
               const Hint('You can still change the split when you record each bill.'),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               const FieldLabel('Splits between'),
               Wrap(spacing: 6, runSpacing: 4, children: [
                 for (final u in hms)
@@ -1046,22 +1062,22 @@ class _RecordBillModalState extends State<_RecordBillModal> {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
           child: SingleChildScrollView(
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-              Text('Record ${sch.title}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
+              Text('Record ${sch.title}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
               const Text('Enter the actual amount, attach proof, and the per-person share is created automatically.',
-                  style: TextStyle(color: HomiesColors.textDim, fontSize: 12)),
-              const SizedBox(height: 12),
+                  style: TextStyle(color: HomiesColors.textDim, fontSize: 13)),
+              const SizedBox(height: 20),
               const FieldLabel('Actual amount'),
               TextField(controller: amountCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), onChanged: (_) => setState(() {})),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               const FieldLabel('Due date'),
               _dateField(dueDate, (v) => setState(() => dueDate = v ?? dueDate)),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   const FieldLabel('Period start'),
@@ -1073,11 +1089,11 @@ class _RecordBillModalState extends State<_RecordBillModal> {
                   _dateField(periodEnd, (v) => setState(() => periodEnd = v ?? periodEnd)),
                 ])),
               ]),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               const FieldLabel('Proof of bill'),
               FilePickerButton(value: proof, onChanged: (v) => setState(() => proof = v), label: 'Choose image or PDF'),
               const Hint('Optional but recommended — housemates can tap to view.'),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               const FieldLabel('Splits between'),
               Wrap(spacing: 6, runSpacing: 4, children: [
                 for (final u in state.activeHousemates)
@@ -1093,7 +1109,7 @@ class _RecordBillModalState extends State<_RecordBillModal> {
                     }),
                   ),
               ]),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               const FieldLabel('Split method'),
               Segment<String>(
                 options: const ['equal', 'prorated'],
@@ -1101,7 +1117,7 @@ class _RecordBillModalState extends State<_RecordBillModal> {
                 labelFor: (v) => v[0].toUpperCase() + v.substring(1),
                 onChanged: (v) => setState(() => split = v),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               HomiesCard(
                 color: HomiesColors.surface2,
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -1119,7 +1135,7 @@ class _RecordBillModalState extends State<_RecordBillModal> {
                   if ((total - input).abs() > 0.05) HomiesChip("Doesn't match ${fmtAUD(input)}", tone: ChipTone.warn),
                 ]),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               CheckboxListTile(
                 value: advanceCycle,
                 onChanged: (v) => setState(() => advanceCycle = v ?? true),

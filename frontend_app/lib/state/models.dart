@@ -1044,10 +1044,12 @@ class WelcomeGuide {
       );
 }
 
-/// A request from one housemate to swap an assigned cleaning task with another.
+/// A request from one housemate to swap an assigned cleaning task or roster day
+/// with another. Exactly one of [taskId] or [rosterDay] will be set.
 class ChoreSwapRequest {
   String id;
-  String taskId;
+  String? taskId;     // set for single-task swaps
+  String? rosterDay;  // set for whole-day roster swaps (e.g. 'Mon')
   String fromUserId;
   String fromUserName;
   String? toUserId; // null = open to any housemate
@@ -1061,7 +1063,8 @@ class ChoreSwapRequest {
 
   ChoreSwapRequest({
     required this.id,
-    required this.taskId,
+    this.taskId,
+    this.rosterDay,
     required this.fromUserId,
     required this.fromUserName,
     this.toUserId,
@@ -1077,6 +1080,7 @@ class ChoreSwapRequest {
   Map<String, dynamic> toJson() => {
         'id': id,
         'taskId': taskId,
+        'rosterDay': rosterDay,
         'fromUserId': fromUserId,
         'fromUserName': fromUserName,
         'toUserId': toUserId,
@@ -1091,7 +1095,8 @@ class ChoreSwapRequest {
 
   factory ChoreSwapRequest.fromJson(Map<String, dynamic> j) => ChoreSwapRequest(
         id: j['id'] as String,
-        taskId: (j['taskId'] ?? '') as String,
+        taskId: j['taskId'] as String?,
+        rosterDay: j['rosterDay'] as String?,
         fromUserId: (j['fromUserId'] ?? '') as String,
         fromUserName: (j['fromUserName'] ?? '') as String,
         toUserId: j['toUserId'] as String?,
@@ -1111,6 +1116,7 @@ class RentShare {
   bool hasParking;
   bool hasBalcony;
   bool hasPrivateWashroom;
+  String? reason;
 
   RentShare({
     required this.userId,
@@ -1118,6 +1124,7 @@ class RentShare {
     this.hasParking = false,
     this.hasBalcony = false,
     this.hasPrivateWashroom = false,
+    this.reason,
   });
 
   Map<String, dynamic> toJson() => {
@@ -1126,6 +1133,7 @@ class RentShare {
         'hasParking': hasParking,
         'hasBalcony': hasBalcony,
         'hasPrivateWashroom': hasPrivateWashroom,
+        'reason': reason,
       };
 
   factory RentShare.fromJson(Map<String, dynamic> j) => RentShare(
@@ -1134,6 +1142,7 @@ class RentShare {
         hasParking: (j['hasParking'] ?? false) as bool,
         hasBalcony: (j['hasBalcony'] ?? false) as bool,
         hasPrivateWashroom: (j['hasPrivateWashroom'] ?? false) as bool,
+        reason: j['reason'] as String?,
       );
 }
 
@@ -1238,6 +1247,7 @@ class Message {
   MessagePoll? poll;
   // Photo / video / voice payload for media messages.
   Attachment? media;
+  bool pinned;
 
   Message({
     required this.id,
@@ -1247,6 +1257,7 @@ class Message {
     this.type = 'text',
     this.poll,
     this.media,
+    this.pinned = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -1257,6 +1268,7 @@ class Message {
         'type': type,
         'poll': poll?.toJson(),
         'media': media?.toJson(),
+        'pinned': pinned,
       };
 
   factory Message.fromJson(Map<String, dynamic> j) => Message(
@@ -1267,6 +1279,7 @@ class Message {
         type: (j['type'] ?? 'text') as String,
         poll: j['poll'] != null ? MessagePoll.fromJson(j['poll'] as Map<String, dynamic>) : null,
         media: Attachment.fromJson(j['media'] as Map<String, dynamic>?),
+        pinned: (j['pinned'] ?? false) as bool,
       );
 }
 
@@ -1297,6 +1310,13 @@ class Complaint {
   int severity;
   String date;
   String status;
+  // Extended fields — null-safe for backward compatibility
+  String? kind;           // 'peer' | 'leaseholder'
+  String? category;       // see _lhCategories in complaints UI
+  String? incidentDate;   // ISO date of when it happened (may differ from filed date)
+  bool anonymous;         // hide filer name from leaseholder view
+  Attachment? evidence;
+
   Complaint({
     required this.id,
     required this.against,
@@ -1305,7 +1325,13 @@ class Complaint {
     required this.severity,
     required this.date,
     this.status = 'open',
+    this.kind,
+    this.category,
+    this.incidentDate,
+    this.anonymous = false,
+    this.evidence,
   });
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'against': against,
@@ -1314,7 +1340,13 @@ class Complaint {
         'severity': severity,
         'date': date,
         'status': status,
+        if (kind != null) 'kind': kind,
+        if (category != null) 'category': category,
+        if (incidentDate != null) 'incidentDate': incidentDate,
+        'anonymous': anonymous,
+        if (evidence != null) 'evidence': evidence!.toJson(),
       };
+
   factory Complaint.fromJson(Map<String, dynamic> j) => Complaint(
         id: j['id'] as String,
         against: j['against'] as String,
@@ -1323,6 +1355,11 @@ class Complaint {
         severity: ((j['severity'] ?? 1) as num).toInt(),
         date: (j['date'] ?? '') as String,
         status: (j['status'] ?? 'open') as String,
+        kind: j['kind'] as String?,
+        category: j['category'] as String?,
+        incidentDate: j['incidentDate'] as String?,
+        anonymous: (j['anonymous'] ?? false) as bool,
+        evidence: j['evidence'] != null ? Attachment.fromJson(j['evidence'] as Map<String, dynamic>) : null,
       );
 }
 
@@ -1487,6 +1524,7 @@ class RentPayment {
   String paidAt; // ISO timestamp
   String periodStart; // ISO date — identifies which rent period this covers
   String? confirmedBy; // who marked it paid if different from the payer
+  Attachment? proof; // optional bank transfer screenshot
 
   RentPayment({
     required this.id,
@@ -1496,6 +1534,7 @@ class RentPayment {
     required this.paidAt,
     required this.periodStart,
     this.confirmedBy,
+    this.proof,
   });
 
   Map<String, dynamic> toJson() => {
@@ -1506,6 +1545,7 @@ class RentPayment {
         'paidAt': paidAt,
         'periodStart': periodStart,
         'confirmedBy': confirmedBy,
+        'proof': proof?.toJson(),
       };
 
   factory RentPayment.fromJson(Map<String, dynamic> j) => RentPayment(
@@ -1516,6 +1556,7 @@ class RentPayment {
         paidAt: (j['paidAt'] ?? '') as String,
         periodStart: (j['periodStart'] ?? '') as String,
         confirmedBy: j['confirmedBy'] as String?,
+        proof: Attachment.fromJson(j['proof'] as Map<String, dynamic>?),
       );
 }
 
@@ -1669,6 +1710,236 @@ class ShoppingItem {
       );
 }
 
+class AppNotification {
+  String id;
+  String kind; // 'payment_request' | 'rent_request'
+  String title;
+  String body;
+  String at; // ISO timestamp
+  String forUserId;
+  bool isRead;
+
+  AppNotification({
+    required this.id,
+    required this.kind,
+    required this.title,
+    required this.body,
+    required this.at,
+    required this.forUserId,
+    this.isRead = false,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'kind': kind,
+        'title': title,
+        'body': body,
+        'at': at,
+        'forUserId': forUserId,
+        'isRead': isRead,
+      };
+
+  factory AppNotification.fromJson(Map<String, dynamic> j) => AppNotification(
+        id: j['id'] as String,
+        kind: (j['kind'] ?? 'payment_request') as String,
+        title: (j['title'] ?? '') as String,
+        body: (j['body'] ?? '') as String,
+        at: (j['at'] ?? '') as String,
+        forUserId: (j['forUserId'] ?? '') as String,
+        isRead: (j['isRead'] ?? false) as bool,
+      );
+}
+
+class HouseTerms {
+  int minStayMonths;
+  int earlyLeaveBondPct;      // bond % if leaving before minStayMonths
+  int midLeaveBondPct;        // bond % if leaving between minStay and 6 months
+  int lateLeaveBondPct;       // bond % if leaving after 6 months
+  int noticePeriodDays;       // days of notice required before vacating
+  int lateRentGraceDays;      // grace days before late fees kick in
+  double lateRentFeePerDay;   // AUD per day after grace period
+  bool petsAllowed;
+  int maxGuestNightsPerWeek;
+  String quietHoursStart;     // "HH:MM" 24-hr
+  String quietHoursEnd;
+  bool smokingAllowed;
+  bool sublettingAllowed;
+  String? customClauses;
+
+  HouseTerms({
+    this.minStayMonths = 3,
+    this.earlyLeaveBondPct = 50,
+    this.midLeaveBondPct = 10,
+    this.lateLeaveBondPct = 20,
+    this.noticePeriodDays = 21,
+    this.lateRentGraceDays = 3,
+    this.lateRentFeePerDay = 0,
+    this.petsAllowed = false,
+    this.maxGuestNightsPerWeek = 2,
+    this.quietHoursStart = '22:00',
+    this.quietHoursEnd = '08:00',
+    this.smokingAllowed = false,
+    this.sublettingAllowed = false,
+    this.customClauses,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'minStayMonths': minStayMonths,
+        'earlyLeaveBondPct': earlyLeaveBondPct,
+        'midLeaveBondPct': midLeaveBondPct,
+        'lateLeaveBondPct': lateLeaveBondPct,
+        'noticePeriodDays': noticePeriodDays,
+        'lateRentGraceDays': lateRentGraceDays,
+        'lateRentFeePerDay': lateRentFeePerDay,
+        'petsAllowed': petsAllowed,
+        'maxGuestNightsPerWeek': maxGuestNightsPerWeek,
+        'quietHoursStart': quietHoursStart,
+        'quietHoursEnd': quietHoursEnd,
+        'smokingAllowed': smokingAllowed,
+        'sublettingAllowed': sublettingAllowed,
+        'customClauses': customClauses,
+      };
+
+  factory HouseTerms.fromJson(Map<String, dynamic> j) => HouseTerms(
+        minStayMonths: ((j['minStayMonths'] ?? 3) as num).toInt(),
+        earlyLeaveBondPct: ((j['earlyLeaveBondPct'] ?? 50) as num).toInt(),
+        midLeaveBondPct: ((j['midLeaveBondPct'] ?? 10) as num).toInt(),
+        lateLeaveBondPct: ((j['lateLeaveBondPct'] ?? 20) as num).toInt(),
+        noticePeriodDays: ((j['noticePeriodDays'] ?? 21) as num).toInt(),
+        lateRentGraceDays: ((j['lateRentGraceDays'] ?? 3) as num).toInt(),
+        lateRentFeePerDay: ((j['lateRentFeePerDay'] ?? 0) as num).toDouble(),
+        petsAllowed: (j['petsAllowed'] ?? false) as bool,
+        maxGuestNightsPerWeek: ((j['maxGuestNightsPerWeek'] ?? 2) as num).toInt(),
+        quietHoursStart: (j['quietHoursStart'] ?? '22:00') as String,
+        quietHoursEnd: (j['quietHoursEnd'] ?? '08:00') as String,
+        smokingAllowed: (j['smokingAllowed'] ?? false) as bool,
+        sublettingAllowed: (j['sublettingAllowed'] ?? false) as bool,
+        customClauses: j['customClauses'] as String?,
+      );
+}
+
+class ApplianceBooking {
+  String id;
+  String appliance;
+  String userId;
+  String userName;
+  String date; // ISO date YYYY-MM-DD
+  String slot; // e.g. '8:00 AM – 10:00 AM'
+  String? note;
+  String createdAt;
+
+  ApplianceBooking({
+    required this.id,
+    required this.appliance,
+    required this.userId,
+    required this.userName,
+    required this.date,
+    required this.slot,
+    this.note,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'appliance': appliance,
+        'userId': userId,
+        'userName': userName,
+        'date': date,
+        'slot': slot,
+        'note': note,
+        'createdAt': createdAt,
+      };
+
+  factory ApplianceBooking.fromJson(Map<String, dynamic> j) => ApplianceBooking(
+        id: j['id'] as String,
+        appliance: (j['appliance'] ?? '') as String,
+        userId: (j['userId'] ?? '') as String,
+        userName: (j['userName'] ?? '') as String,
+        date: (j['date'] ?? '') as String,
+        slot: (j['slot'] ?? '') as String,
+        note: j['note'] as String?,
+        createdAt: (j['createdAt'] ?? '') as String,
+      );
+}
+
+class ConditionItem {
+  String id;
+  String area;
+  String condition; // 'good' | 'fair' | 'poor'
+  String notes;
+  Attachment? photo;
+
+  ConditionItem({
+    required this.id,
+    required this.area,
+    required this.condition,
+    this.notes = '',
+    this.photo,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'area': area,
+        'condition': condition,
+        'notes': notes,
+        'photo': photo?.toJson(),
+      };
+
+  factory ConditionItem.fromJson(Map<String, dynamic> j) => ConditionItem(
+        id: j['id'] as String,
+        area: (j['area'] ?? '') as String,
+        condition: (j['condition'] ?? 'good') as String,
+        notes: (j['notes'] ?? '') as String,
+        photo: Attachment.fromJson(j['photo'] as Map<String, dynamic>?),
+      );
+}
+
+class ConditionCheck {
+  String id;
+  String type; // 'move-in' | 'move-out'
+  String userId;
+  String userName;
+  String createdBy;
+  String createdAt;
+  List<ConditionItem> items;
+  String? notes;
+
+  ConditionCheck({
+    required this.id,
+    required this.type,
+    required this.userId,
+    required this.userName,
+    required this.createdBy,
+    required this.createdAt,
+    List<ConditionItem>? items,
+    this.notes,
+  }) : items = items ?? [];
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'type': type,
+        'userId': userId,
+        'userName': userName,
+        'createdBy': createdBy,
+        'createdAt': createdAt,
+        'items': items.map((i) => i.toJson()).toList(),
+        'notes': notes,
+      };
+
+  factory ConditionCheck.fromJson(Map<String, dynamic> j) => ConditionCheck(
+        id: j['id'] as String,
+        type: (j['type'] ?? 'move-in') as String,
+        userId: (j['userId'] ?? '') as String,
+        userName: (j['userName'] ?? '') as String,
+        createdBy: (j['createdBy'] ?? '') as String,
+        createdAt: (j['createdAt'] ?? '') as String,
+        items: ((j['items'] as List?) ?? [])
+            .map((e) => ConditionItem.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        notes: j['notes'] as String?,
+      );
+}
+
 class Session {
   String? userId;
   Map<String, dynamic>? pendingSignup;
@@ -1676,6 +1947,50 @@ class Session {
   Map<String, dynamic> toJson() => {'userId': userId, 'pendingSignup': pendingSignup};
   factory Session.fromJson(Map<String, dynamic> j) =>
       Session(userId: j['userId'] as String?, pendingSignup: j['pendingSignup'] as Map<String, dynamic>?);
+}
+
+class LeaseholderReview {
+  String id;
+  String leaseholderId;
+  String fromUserId;
+  String fromUserName;
+  bool anonymous;
+  int rating; // 1–5
+  String body;
+  String date; // ISO date
+
+  LeaseholderReview({
+    required this.id,
+    required this.leaseholderId,
+    required this.fromUserId,
+    required this.fromUserName,
+    this.anonymous = false,
+    required this.rating,
+    required this.body,
+    required this.date,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'leaseholderId': leaseholderId,
+        'fromUserId': fromUserId,
+        'fromUserName': fromUserName,
+        'anonymous': anonymous,
+        'rating': rating,
+        'body': body,
+        'date': date,
+      };
+
+  factory LeaseholderReview.fromJson(Map<String, dynamic> j) => LeaseholderReview(
+        id: j['id'] as String,
+        leaseholderId: j['leaseholderId'] as String,
+        fromUserId: j['fromUserId'] as String,
+        fromUserName: (j['fromUserName'] ?? '') as String,
+        anonymous: (j['anonymous'] ?? false) as bool,
+        rating: ((j['rating'] ?? 3) as num).toInt(),
+        body: (j['body'] ?? '') as String,
+        date: (j['date'] ?? '') as String,
+      );
 }
 
 class Listing {
@@ -1982,5 +2297,45 @@ class PostMessage {
         kind: (j['kind'] ?? 'text') as String,
         perf: PerfSnapshot.fromJson(j['perf'] as Map<String, dynamic>?),
         attachment: Attachment.fromJson(j['attachment'] as Map<String, dynamic>?),
+      );
+}
+
+class ParkingBooking {
+  String id;
+  String spot;
+  String userId;
+  String userName;
+  String date; // ISO date YYYY-MM-DD
+  String? note;
+  String createdAt;
+
+  ParkingBooking({
+    required this.id,
+    required this.spot,
+    required this.userId,
+    required this.userName,
+    required this.date,
+    this.note,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'spot': spot,
+        'userId': userId,
+        'userName': userName,
+        'date': date,
+        'note': note,
+        'createdAt': createdAt,
+      };
+
+  factory ParkingBooking.fromJson(Map<String, dynamic> j) => ParkingBooking(
+        id: j['id'] as String,
+        spot: (j['spot'] ?? '') as String,
+        userId: (j['userId'] ?? '') as String,
+        userName: (j['userName'] ?? '') as String,
+        date: (j['date'] ?? '') as String,
+        note: j['note'] as String?,
+        createdAt: (j['createdAt'] ?? '') as String,
       );
 }

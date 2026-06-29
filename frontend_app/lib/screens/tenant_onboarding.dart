@@ -95,7 +95,7 @@ class _TenantOnboardingScreenState extends State<TenantOnboardingScreen> {
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             const Text("Welcome — let's get you moved in", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
             Text('Step ${_step + 1} of ${steps.length} — ${steps[_step]}',

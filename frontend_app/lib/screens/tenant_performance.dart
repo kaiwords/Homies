@@ -39,7 +39,7 @@ class TenantPerformanceScreen extends StatelessWidget {
 
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const PageHead(
             title: 'Tenant performance',

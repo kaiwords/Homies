@@ -73,8 +73,21 @@ String fmtRelative(String? iso) {
   if (days == 1) return 'tomorrow';
   if (days == -1) return 'yesterday';
   if (days > 0 && days < 7) return 'in $days days';
+  if (days >= 7 && days < 31) {
+    final w = (days / 7).round();
+    return 'in $w week${w == 1 ? '' : 's'}';
+  }
+  if (days >= 31) {
+    final m = (days / 30).round();
+    return 'in $m month${m == 1 ? '' : 's'}';
+  }
   if (days < 0 && days > -7) return '${days.abs()} days ago';
-  return fmtDate(iso);
+  if (days <= -7 && days > -31) {
+    final w = (days.abs() / 7).round();
+    return '$w week${w == 1 ? '' : 's'} ago';
+  }
+  final m = (days.abs() / 30).round();
+  return '$m month${m == 1 ? '' : 's'} ago';
 }
 
 List<double> equalSplit(double total, int n) {

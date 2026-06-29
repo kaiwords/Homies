@@ -27,7 +27,7 @@ class _HousematesScreenState extends State<HousematesScreen> {
 
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           PageHead(
             title: 'Housemates',
@@ -37,19 +37,21 @@ class _HousematesScreenState extends State<HousematesScreen> {
                 : null,
           ),
           if (isLeaseholder && awaiting.isNotEmpty) ...[
-            const Padding(padding: EdgeInsets.only(top: 8, bottom: 4), child: Text('⏳ Awaiting your approval', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16))),
+            const Padding(padding: EdgeInsets.only(top: 12, bottom: 6), child: Text('⏳ Awaiting your approval', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16))),
             for (final u in awaiting) _ApprovalCard(user: u),
-            const Divider(),
+            const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider()),
             const Text('Active housemates', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
           ],
           for (final u in shown) _UserCard(user: u),
+          const _LhReviewsCard(),
           if (state.invites.isNotEmpty)
             HomiesCard(
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 const Text('Pending invites', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                const SizedBox(height: 8),
                 for (final i in state.invites)
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Row(children: [
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -75,13 +77,13 @@ class _HousematesScreenState extends State<HousematesScreen> {
       isScrollControlled: true,
       builder: (_) => StatefulBuilder(builder: (ctx, setSheet) {
         return Padding(
-          padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+          padding: EdgeInsets.only(left: 20, right: 20, top: 24, bottom: MediaQuery.of(ctx).viewInsets.bottom + 24),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            const Text('Invite a housemate', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 10),
+            const Text('Invite a housemate', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 20),
             const FieldLabel('Email'),
             TextField(controller: emailCtrl, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(hintText: 'housemate@example.com')),
-            const SizedBox(height: 10),
+            const SizedBox(height: 16),
             const FieldLabel('Role'),
             Segment<String>(
               options: const ['tenant', 'leaseholder'],
@@ -89,7 +91,7 @@ class _HousematesScreenState extends State<HousematesScreen> {
               labelFor: (v) => v == 'tenant' ? 'Tenant' : 'Co-leaseholder',
               onChanged: (v) => setSheet(() => role = v),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 24),
             Row(mainAxisAlignment: MainAxisAlignment.end, children: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               const SizedBox(width: 8),
@@ -145,7 +147,7 @@ class _UserCard extends StatelessWidget {
                 HomiesChip('moving out ${fmtDate(user.moveOutDate)}'),
               if (isApprovalComplete(user)) const HomiesChip('active', tone: ChipTone.ok),
             ]),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             if (contactParts.isNotEmpty)
               Text(contactParts.join(' · '), style: const TextStyle(color: HomiesColors.textDim, fontSize: 12)),
             Text(
@@ -260,7 +262,7 @@ class _UserMenu extends StatelessWidget {
                   ]),
                 ),
               ]),
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
               Wrap(spacing: 8, runSpacing: 2, children: [
                 if (canSeeEmail)
                   Text(user.email, style: const TextStyle(color: HomiesColors.textDim, fontSize: 12))
@@ -422,7 +424,7 @@ class _ApprovalCard extends StatelessWidget {
     }
 
     return HomiesCard(
-      borderColor: HomiesColors.warnSoft,
+      borderColor: HomiesColors.warnBorder,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
           Avatar.lg(user),
@@ -510,6 +512,228 @@ class _ApprovalRow extends StatelessWidget {
         else
           ElevatedButton(onPressed: onApprove, child: const Text('Approve')),
       ]),
+    );
+  }
+}
+
+// ── Leaseholder reviews ──────────────────────────────────────────────────────
+
+class _LhReviewsCard extends StatelessWidget {
+  const _LhReviewsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final cu = state.currentUser!;
+    final leaseholders = state.activeHousemates.where((u) => u.role == 'leaseholder').toList();
+    if (leaseholders.isEmpty) return const SizedBox.shrink();
+
+    return HomiesCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Text('Leaseholder reviews', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        const Text(
+          'Share honest feedback about your leaseholder.',
+          style: TextStyle(color: HomiesColors.textDim, fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        for (final lh in leaseholders) _LhReviewSection(leaseholder: lh, cu: cu),
+      ]),
+    );
+  }
+}
+
+class _LhReviewSection extends StatelessWidget {
+  final User leaseholder;
+  final User cu;
+  const _LhReviewSection({required this.leaseholder, required this.cu});
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final reviews = state.lhReviews.where((r) => r.leaseholderId == leaseholder.id).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    final myReview = reviews.firstWhereOrNull((r) => r.fromUserId == cu.id);
+    final avg = reviews.isEmpty ? 0.0 : reviews.map((r) => r.rating).reduce((a, b) => a + b) / reviews.length;
+    final isSelf = cu.id == leaseholder.id;
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [
+        Avatar(user: leaseholder),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(leaseholder.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            if (reviews.isNotEmpty)
+              Row(children: [
+                for (int i = 1; i <= 5; i++)
+                  Icon(i <= avg.round() ? Icons.star_rounded : Icons.star_outline_rounded,
+                      size: 14, color: const Color(0xFFF5A623)),
+                const SizedBox(width: 4),
+                Text('${avg.toStringAsFixed(1)} (${reviews.length})',
+                    style: const TextStyle(fontSize: 11, color: HomiesColors.textDim)),
+              ])
+            else
+              const Text('No reviews yet', style: TextStyle(fontSize: 11, color: HomiesColors.textFaint)),
+          ]),
+        ),
+        if (!isSelf)
+          TextButton(
+            onPressed: () => showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              builder: (_) => _WriteReviewSheet(leaseholder: leaseholder, existing: myReview),
+            ),
+            child: Text(myReview == null ? 'Review' : 'Edit review'),
+          ),
+      ]),
+      if (reviews.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        for (final r in reviews)
+          Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: r.fromUserId == cu.id ? HomiesColors.accentSoft : HomiesColors.surface2,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: r.fromUserId == cu.id ? HomiesColors.accentBorder : HomiesColors.border),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                for (int i = 1; i <= 5; i++)
+                  Icon(i <= r.rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                      size: 13, color: const Color(0xFFF5A623)),
+                const SizedBox(width: 6),
+                Text(
+                  r.anonymous ? 'Anonymous' : r.fromUserName,
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: HomiesColors.textDim),
+                ),
+                const Spacer(),
+                Text(fmtDate(r.date), style: const TextStyle(fontSize: 10, color: HomiesColors.textFaint)),
+              ]),
+              if (r.body.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(r.body, style: const TextStyle(fontSize: 12)),
+              ],
+            ]),
+          ),
+      ],
+      const Divider(height: 20),
+    ]);
+  }
+}
+
+class _WriteReviewSheet extends StatefulWidget {
+  final User leaseholder;
+  final LeaseholderReview? existing;
+  const _WriteReviewSheet({required this.leaseholder, this.existing});
+
+  @override
+  State<_WriteReviewSheet> createState() => _WriteReviewSheetState();
+}
+
+class _WriteReviewSheetState extends State<_WriteReviewSheet> {
+  int _rating = 3;
+  bool _anon = false;
+  late final TextEditingController _bodyCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _rating = widget.existing?.rating ?? 3;
+    _anon = widget.existing?.anonymous ?? false;
+    _bodyCtrl = TextEditingController(text: widget.existing?.body ?? '');
+  }
+
+  @override
+  void dispose() {
+    _bodyCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final cu = state.currentUser!;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (_, ctrl) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewInsets.bottom + 28),
+        child: ListView(controller: ctrl, children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 14),
+              decoration: BoxDecoration(color: HomiesColors.textFaint, borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          Text(
+            widget.existing == null ? 'Review ${widget.leaseholder.name.split(' ').first}' : 'Edit your review',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 20),
+          const FieldLabel('Rating'),
+          const SizedBox(height: 8),
+          Row(children: [
+            for (int i = 1; i <= 5; i++)
+              GestureDetector(
+                onTap: () => setState(() => _rating = i),
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Icon(
+                    i <= _rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                    size: 34,
+                    color: const Color(0xFFF5A623),
+                  ),
+                ),
+              ),
+          ]),
+          const SizedBox(height: 16),
+          const FieldLabel('Your thoughts (optional)'),
+          TextField(
+            controller: _bodyCtrl,
+            minLines: 2,
+            maxLines: 5,
+            decoration: const InputDecoration(hintText: 'What went well? What could be better?'),
+          ),
+          const SizedBox(height: 12),
+          Row(children: [
+            Checkbox(
+              value: _anon,
+              onChanged: (v) => setState(() => _anon = v ?? false),
+            ),
+            const Text('Submit anonymously', style: TextStyle(fontSize: 13)),
+          ]),
+          const SizedBox(height: 20),
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: () {
+                state.mutate(() {
+                  state.lhReviews.removeWhere((r) => r.fromUserId == cu.id && r.leaseholderId == widget.leaseholder.id);
+                  state.lhReviews.add(LeaseholderReview(
+                    id: 'lhr-${Random().nextInt(0xFFFFFF).toRadixString(36)}',
+                    leaseholderId: widget.leaseholder.id,
+                    fromUserId: cu.id,
+                    fromUserName: cu.name,
+                    anonymous: _anon,
+                    rating: _rating,
+                    body: _bodyCtrl.text.trim(),
+                    date: todayIso(),
+                  ));
+                });
+                Navigator.pop(context);
+              },
+              child: const Text('Submit review'),
+            ),
+          ]),
+        ]),
+      ),
     );
   }
 }

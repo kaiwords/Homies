@@ -41,7 +41,7 @@ class _CleaningScreenState extends State<CleaningScreen> {
 
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           PageHead(
             title: 'Cleaning',
@@ -73,7 +73,7 @@ class _CleaningScreenState extends State<CleaningScreen> {
                   style: const TextStyle(color: HomiesColors.textDim, fontSize: 12)),
               const SizedBox(height: 8),
               LayoutBuilder(builder: (context, c) {
-                final cols = c.maxWidth < 400 ? 2 : c.maxWidth < 640 ? 3 : 4;
+                final cols = c.maxWidth < 480 ? 2 : c.maxWidth < 640 ? 3 : 4;
                 final present = _days.where((d) => state.cleaningRoster.any((r) => r.day == d)).toList();
                 return Wrap(spacing: 8, runSpacing: 8, children: [
                   for (final d in present)
@@ -104,6 +104,7 @@ class _CleaningScreenState extends State<CleaningScreen> {
           ),
           if (!isLeaseholder) _TenantAvailabilityCard(userId: cu.id),
           const _SwapRequestsCard(),
+          const _ApplianceBookingCard(),
           HomiesCard(
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               const Text('Tasks', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
@@ -145,6 +146,9 @@ class _RosterTile extends StatelessWidget {
     final state = HomiesScope.of(context);
     final row = state.cleaningRoster.firstWhereOrNull((r) => r.day == day);
     final assignee = row != null ? state.findUser(row.assignee) : null;
+
+    final cu = state.currentUser;
+    final isMine = !isLeaseholder && cu != null && row?.assignee == cu.id;
 
     return Container(
       padding: const EdgeInsets.all(10),
@@ -197,6 +201,23 @@ class _RosterTile extends StatelessWidget {
           Row(children: [Avatar.sm(assignee), const SizedBox(width: 6), Text(assignee.name.split(' ').first, style: const TextStyle(fontSize: 12))])
         else
           const Text('unassigned', style: TextStyle(color: HomiesColors.textFaint, fontSize: 12)),
+        if (isMine) ...[
+          const SizedBox(height: 6),
+          OutlinedButton.icon(
+            onPressed: () => showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              builder: (_) => _DaySwapSheet(day: day, area: row?.area ?? ''),
+            ),
+            icon: const Icon(Icons.swap_horiz_rounded, size: 13),
+            label: const Text('Swap day', style: TextStyle(fontSize: 11)),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+        ],
       ]),
     );
   }
@@ -277,10 +298,10 @@ class _TaskRow extends StatelessWidget {
                       context: context,
                       isScrollControlled: true,
                       builder: (_) => Padding(
-                        padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+                        padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 24),
                         child: Column(mainAxisSize: MainAxisSize.min, children: [
                           const Text('Upload photo proof', style: TextStyle(fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 14),
                           FilePickerButton(
                             value: null,
                             onChanged: (f) {
@@ -318,10 +339,10 @@ class _TaskRow extends StatelessWidget {
                     context: context,
                     isScrollControlled: true,
                     builder: (_) => Padding(
-                      padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+                      padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 24),
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
                         const Text('Attach photo', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 14),
                         FilePickerButton(
                           value: task.photo,
                           onChanged: (f) {
@@ -443,21 +464,21 @@ class _TaskModalState extends State<_TaskModal> {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
         child: SingleChildScrollView(
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-            Text(isEdit ? 'Edit cleaning task' : 'Add cleaning task', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 10),
+            Text(isEdit ? 'Edit cleaning task' : 'Add cleaning task', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 20),
             const FieldLabel('Task'),
             TextField(controller: taskCtrl, decoration: const InputDecoration(hintText: 'Scrub the oven')),
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
             const FieldLabel('Assignee'),
             DropdownButtonFormField<String>(
               initialValue: assignee,
               items: [for (final u in hms) DropdownMenuItem(value: u.id, child: Text(u.name))],
               onChanged: (v) => setState(() => assignee = v),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
             const FieldLabel('Due date'),
             InkWell(
               onTap: () async {
@@ -470,7 +491,7 @@ class _TaskModalState extends State<_TaskModal> {
                     style: TextStyle(color: dueDate != null ? HomiesColors.text : HomiesColors.textFaint)),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 24),
             Row(mainAxisAlignment: MainAxisAlignment.end, children: [
               TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
               const SizedBox(width: 8),
@@ -694,14 +715,14 @@ class _SwapRequestsCard extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const Text('Swap requests', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
           if (incoming.isNotEmpty) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
             const Text('NEEDS YOUR RESPONSE',
                 style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: HomiesColors.textFaint, letterSpacing: 0.8)),
             const SizedBox(height: 6),
             for (final r in incoming) _IncomingSwapTile(request: r),
           ],
           if (mine.isNotEmpty) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
             const Text('YOUR REQUESTS',
                 style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: HomiesColors.textFaint, letterSpacing: 0.8)),
             const SizedBox(height: 6),
@@ -721,7 +742,9 @@ class _IncomingSwapTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = HomiesScope.of(context);
     final cu = state.currentUser!;
-    final task = state.cleaningTasks.firstWhereOrNull((t) => t.id == request.taskId);
+    final isDaySwap = request.rosterDay != null;
+    final task = isDaySwap ? null : state.cleaningTasks.firstWhereOrNull((t) => t.id == request.taskId);
+    final rosterEntry = isDaySwap ? state.cleaningRoster.firstWhereOrNull((r) => r.day == request.rosterDay) : null;
     final requester = state.activeHousemates.firstWhereOrNull((u) => u.id == request.fromUserId);
 
     return Container(
@@ -740,10 +763,12 @@ class _IncomingSwapTile extends StatelessWidget {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(request.fromUserName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
               Text(
-                'wants to swap: ${task?.task ?? 'Unknown task'}',
+                isDaySwap
+                    ? 'wants to swap: ${request.rosterDay} cleaning${rosterEntry?.area.isNotEmpty == true ? ' (${rosterEntry!.area})' : ''}'
+                    : 'wants to swap: ${task?.task ?? 'Unknown task'}',
                 style: const TextStyle(fontSize: 12, color: HomiesColors.textDim),
               ),
-              if (task != null)
+              if (!isDaySwap && task != null)
                 Text('Due ${fmtDate(task.dueDate)}',
                     style: const TextStyle(fontSize: 11, color: HomiesColors.textFaint)),
             ]),
@@ -772,12 +797,17 @@ class _IncomingSwapTile extends StatelessWidget {
               request.respondedAt = DateTime.now().toIso8601String();
               request.respondedBy = cu.id;
               request.respondedByName = cu.name;
-              if (task != null) task.assignee = cu.id;
+              if (isDaySwap) {
+                if (rosterEntry != null) rosterEntry.assignee = cu.id;
+              } else {
+                if (task != null) task.assignee = cu.id;
+              }
               for (final other in state.choreSwaps) {
-                if (other.id != request.id &&
-                    other.taskId == request.taskId &&
-                    other.status == 'pending') {
-                  other.status = 'cancelled';
+                if (other.id != request.id && other.status == 'pending') {
+                  final sameSlot = isDaySwap
+                      ? other.rosterDay == request.rosterDay
+                      : other.taskId == request.taskId;
+                  if (sameSlot) other.status = 'cancelled';
                 }
               }
             }),
@@ -796,7 +826,13 @@ class _MySwapTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = HomiesScope.of(context);
-    final task = state.cleaningTasks.firstWhereOrNull((t) => t.id == request.taskId);
+    final isDaySwap = request.rosterDay != null;
+    final task = isDaySwap ? null : state.cleaningTasks.firstWhereOrNull((t) => t.id == request.taskId);
+    final rosterEntry = isDaySwap ? state.cleaningRoster.firstWhereOrNull((r) => r.day == request.rosterDay) : null;
+
+    final label = isDaySwap
+        ? '${request.rosterDay} cleaning${rosterEntry?.area.isNotEmpty == true ? ' (${rosterEntry!.area})' : ''}'
+        : (task?.task ?? 'Unknown task');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
@@ -809,8 +845,7 @@ class _MySwapTile extends StatelessWidget {
       child: Row(children: [
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(task?.task ?? 'Unknown task',
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
             Text(
               request.toUserId == null ? 'Open to anyone' : 'Directed at ${request.toUserName ?? ''}',
               style: const TextStyle(fontSize: 12, color: HomiesColors.textDim),
@@ -825,6 +860,113 @@ class _MySwapTile extends StatelessWidget {
           onPressed: () => state.mutate(() => request.status = 'cancelled'),
           child: const Text('Cancel', style: TextStyle(color: HomiesColors.danger)),
         ),
+      ]),
+    );
+  }
+}
+
+class _DaySwapSheet extends StatefulWidget {
+  final String day;
+  final String area;
+  const _DaySwapSheet({required this.day, required this.area});
+
+  @override
+  State<_DaySwapSheet> createState() => _DaySwapSheetState();
+}
+
+class _DaySwapSheetState extends State<_DaySwapSheet> {
+  String? toUserId;
+  String? toUserName;
+  final _noteCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final cu = state.currentUser!;
+    final others = state.activeHousemates.where((u) => u.id != cu.id).toList();
+
+    final alreadyPending = state.choreSwaps.any(
+      (r) => r.rosterDay == widget.day && r.fromUserId == cu.id && r.status == 'pending',
+    );
+
+    final title = widget.area.isNotEmpty
+        ? 'Swap ${widget.day} (${widget.area})'
+        : 'Swap ${widget.day} cleaning';
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 24),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Expanded(child: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600))),
+          IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+        ]),
+        const SizedBox(height: 20),
+        if (alreadyPending)
+          const Text('You already have a pending swap request for this day.',
+              style: TextStyle(color: HomiesColors.textDim))
+        else ...[
+          const FieldLabel('Ask who?'),
+          DropdownButtonFormField<String?>(
+            initialValue: toUserId,
+            items: [
+              const DropdownMenuItem(value: null, child: Text('Anyone (open request)')),
+              for (final u in others) DropdownMenuItem(value: u.id, child: Text(u.name)),
+            ],
+            onChanged: (v) => setState(() {
+              toUserId = v;
+              toUserName = v == null ? null : others.firstWhere((u) => u.id == v).name;
+            }),
+          ),
+          const SizedBox(height: 14),
+          const FieldLabel('Note (optional)'),
+          TextField(
+            controller: _noteCtrl,
+            decoration: const InputDecoration(hintText: "e.g. I'll be out of town"),
+            maxLines: 2,
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () {
+              final swapId = 'sw-${Random().nextInt(0xFFFF).toRadixString(36)}';
+              final now = DateTime.now().toIso8601String();
+              state.mutate(() {
+                state.choreSwaps.add(ChoreSwapRequest(
+                  id: swapId,
+                  rosterDay: widget.day,
+                  fromUserId: cu.id,
+                  fromUserName: cu.name,
+                  toUserId: toUserId,
+                  toUserName: toUserName,
+                  note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+                  requestedAt: now,
+                ));
+              });
+              final areaLabel = widget.area.isNotEmpty ? ' (${widget.area})' : '';
+              final noteLabel = _noteCtrl.text.trim().isNotEmpty ? ' — "${_noteCtrl.text.trim()}"' : '';
+              final targets = toUserId != null
+                  ? [toUserId!]
+                  : state.activeHousemates.where((u) => u.id != cu.id).map((u) => u.id).toList();
+              for (final tid in targets) {
+                state.addAppNotification(AppNotification(
+                  id: 'swap_${swapId}_$tid',
+                  kind: 'swap_request',
+                  title: '${cu.name} wants to swap their ${widget.day} clean',
+                  body: '${cu.name} is looking for someone to cover their ${widget.day}$areaLabel slot$noteLabel. Respond in Cleaning.',
+                  at: now,
+                  forUserId: tid,
+                ));
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('Send request'),
+          ),
+        ],
       ]),
     );
   }
@@ -860,7 +1002,7 @@ class _SwapSheetState extends State<_SwapSheet> {
     );
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 20, 16, MediaQuery.of(context).viewInsets.bottom + 20),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 24),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
           Expanded(
@@ -871,7 +1013,7 @@ class _SwapSheetState extends State<_SwapSheet> {
           ),
           IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
         ]),
-        const SizedBox(height: 14),
+        const SizedBox(height: 20),
         if (alreadyPending)
           const Text('You already have a pending swap request for this task.',
               style: TextStyle(color: HomiesColors.textDim))
@@ -888,7 +1030,7 @@ class _SwapSheetState extends State<_SwapSheet> {
               toUserName = v == null ? null : others.firstWhere((u) => u.id == v).name;
             }),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           const FieldLabel('Note (optional)'),
           TextField(
             controller: _noteCtrl,
@@ -898,24 +1040,348 @@ class _SwapSheetState extends State<_SwapSheet> {
           const SizedBox(height: 16),
           ElevatedButton(
             onPressed: () {
+              final swapId = 'sw-${Random().nextInt(0xFFFF).toRadixString(36)}';
+              final now = DateTime.now().toIso8601String();
               state.mutate(() {
                 state.choreSwaps.add(ChoreSwapRequest(
-                  id: 'sw-${Random().nextInt(0xFFFF).toRadixString(36)}',
+                  id: swapId,
                   taskId: widget.task.id,
                   fromUserId: cu.id,
                   fromUserName: cu.name,
                   toUserId: toUserId,
                   toUserName: toUserName,
                   note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
-                  requestedAt: DateTime.now().toIso8601String(),
+                  requestedAt: now,
                 ));
               });
+              // Notify target(s)
+              final targets = toUserId != null
+                  ? [toUserId!]
+                  : state.activeHousemates.where((u) => u.id != cu.id).map((u) => u.id).toList();
+              for (final tid in targets) {
+                state.addAppNotification(AppNotification(
+                  id: 'swap_${swapId}_$tid',
+                  kind: 'swap_request',
+                  title: '${cu.name} wants to swap a chore',
+                  body: 'They want to hand off "${widget.task.task}"${_noteCtrl.text.trim().isNotEmpty ? ' — "${_noteCtrl.text.trim()}"' : ''}. Respond in Cleaning.',
+                  at: now,
+                  forUserId: tid,
+                ));
+              }
               Navigator.pop(context);
             },
             child: const Text('Send request'),
           ),
         ],
       ]),
+    );
+  }
+}
+
+// ── Appliance booking ────────────────────────────────────────────────────────
+
+const _appliances = ['Washing machine', 'Dryer', 'Dishwasher', 'BBQ', 'Oven'];
+
+const _slots = [
+  '6:00 AM – 8:00 AM',
+  '8:00 AM – 10:00 AM',
+  '10:00 AM – 12:00 PM',
+  '12:00 PM – 2:00 PM',
+  '2:00 PM – 4:00 PM',
+  '4:00 PM – 6:00 PM',
+  '6:00 PM – 8:00 PM',
+  '8:00 PM – 10:00 PM',
+];
+
+class _ApplianceBookingCard extends StatelessWidget {
+  const _ApplianceBookingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final cu = state.currentUser!;
+    final isLeaseholder = cu.role == 'leaseholder';
+    final todayIsoStr = toIso(DateTime.now())!;
+    final cutoff = toIso(DateTime.now().add(const Duration(days: 6)))!;
+
+    final upcoming = state.applianceBookings
+        .where((b) => b.date.compareTo(todayIsoStr) >= 0 && b.date.compareTo(cutoff) <= 0)
+        .toList()
+      ..sort((a, b) {
+        final d = a.date.compareTo(b.date);
+        return d != 0 ? d : a.slot.compareTo(b.slot);
+      });
+
+    final byDate = <String, List<ApplianceBooking>>{};
+    for (final b in upcoming) {
+      (byDate[b.date] ??= []).add(b);
+    }
+    final dates = byDate.keys.toList()..sort();
+
+    return HomiesCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          const Expanded(
+            child: Text('Appliance bookings', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton(
+            onPressed: () => showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              builder: (_) => const _BookSlotSheet(),
+            ),
+            child: const Text('Book slot'),
+          ),
+        ]),
+        const Text(
+          'Reserve the washing machine, dryer and other shared appliances.',
+          style: TextStyle(color: HomiesColors.textDim, fontSize: 12),
+        ),
+        if (upcoming.isEmpty) ...[
+          const SizedBox(height: 10),
+          const Text('No bookings in the next 7 days.', style: TextStyle(color: HomiesColors.textFaint, fontSize: 12)),
+        ] else ...[
+          const SizedBox(height: 12),
+          for (final date in dates) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                fmtDate(date),
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: HomiesColors.textFaint, letterSpacing: 0.6),
+              ),
+            ),
+            for (final b in byDate[date]!)
+              Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: b.userId == cu.id ? HomiesColors.accentSoft : HomiesColors.surface2,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: b.userId == cu.id ? HomiesColors.accentBorder : HomiesColors.border,
+                  ),
+                ),
+                child: Row(children: [
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(b.appliance, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                      Text(
+                        '${b.slot} · ${b.userId == cu.id ? 'You' : b.userName}',
+                        style: const TextStyle(fontSize: 12, color: HomiesColors.textDim),
+                      ),
+                      if (b.note?.isNotEmpty == true)
+                        Text('"${b.note}"', style: const TextStyle(fontSize: 11, color: HomiesColors.textFaint, fontStyle: FontStyle.italic)),
+                    ]),
+                  ),
+                  if (b.userId == cu.id || isLeaseholder)
+                    TextButton(
+                      onPressed: () => state.mutate(() => state.applianceBookings.removeWhere((x) => x.id == b.id)),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('Cancel', style: TextStyle(color: HomiesColors.danger, fontSize: 12)),
+                    ),
+                ]),
+              ),
+            const SizedBox(height: 4),
+          ],
+        ],
+      ]),
+    );
+  }
+}
+
+class _BookSlotSheet extends StatefulWidget {
+  const _BookSlotSheet();
+
+  @override
+  State<_BookSlotSheet> createState() => _BookSlotSheetState();
+}
+
+class _BookSlotSheetState extends State<_BookSlotSheet> {
+  String _appliance = _appliances.first;
+  DateTime _date = DateTime.now();
+  String? _slot;
+  final _noteCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final cu = state.currentUser!;
+    final dateIso = toIso(_date)!;
+
+    final takenSlots = state.applianceBookings
+        .where((b) => b.appliance == _appliance && b.date == dateIso)
+        .map((b) => b.slot)
+        .toSet();
+
+    final mySlots = state.applianceBookings
+        .where((b) => b.userId == cu.id && b.appliance == _appliance && b.date == dateIso)
+        .map((b) => b.slot)
+        .toSet();
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.97,
+      expand: false,
+      builder: (_, ctrl) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewInsets.bottom + 28),
+        child: ListView(controller: ctrl, children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 14),
+              decoration: BoxDecoration(color: HomiesColors.textFaint, borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          const Text('Book an appliance', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          const Padding(
+            padding: EdgeInsets.only(top: 4, bottom: 20),
+            child: Text('Pick the appliance, day and time slot.', style: TextStyle(color: HomiesColors.textDim, fontSize: 13)),
+          ),
+
+          const FieldLabel('Appliance'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final a in _appliances)
+                GestureDetector(
+                  onTap: () => setState(() { _appliance = a; _slot = null; }),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 120),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _appliance == a ? HomiesColors.accentSoft : HomiesColors.surface2,
+                      border: Border.all(color: _appliance == a ? HomiesColors.accentBorder : HomiesColors.border),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      a,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: _appliance == a ? HomiesColors.accentStrong : HomiesColors.text,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          const FieldLabel('Date'),
+          InkWell(
+            onTap: () async {
+              final d = await pickDate(context, initial: _date);
+              if (d != null) setState(() { _date = d; _slot = null; });
+            },
+            child: InputDecorator(
+              decoration: const InputDecoration(),
+              child: Text(fmtDate(dateIso)),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          const FieldLabel('Time slot'),
+          const SizedBox(height: 4),
+          const Text(
+            'Red = taken · Blue = yours · tap to select',
+            style: TextStyle(fontSize: 11, color: HomiesColors.textFaint),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final s in _slots)
+                Builder(builder: (ctx) {
+                  final isMine = mySlots.contains(s);
+                  final isTaken = takenSlots.contains(s) && !isMine;
+                  final isSelected = _slot == s;
+                  return GestureDetector(
+                    onTap: isTaken ? null : () => setState(() => _slot = isSelected ? null : s),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 120),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? HomiesColors.accentSoft
+                            : isTaken
+                                ? HomiesColors.dangerSoft
+                                : HomiesColors.surface2,
+                        border: Border.all(
+                          color: isSelected
+                              ? HomiesColors.accentBorder
+                              : isTaken
+                                  ? HomiesColors.dangerBorder
+                                  : HomiesColors.border,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        s,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: isSelected
+                              ? HomiesColors.accentStrong
+                              : isTaken
+                                  ? HomiesColors.danger
+                                  : HomiesColors.text,
+                          decoration: isTaken ? TextDecoration.lineThrough : null,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          const FieldLabel('Note (optional)'),
+          TextField(
+            controller: _noteCtrl,
+            decoration: const InputDecoration(hintText: 'e.g. big load, will be quick'),
+          ),
+          const SizedBox(height: 24),
+
+          ElevatedButton(
+            onPressed: _slot == null
+                ? null
+                : () {
+                    state.mutate(() {
+                      state.applianceBookings.add(ApplianceBooking(
+                        id: 'ab-${Random().nextInt(0xFFFFFF).toRadixString(36)}',
+                        appliance: _appliance,
+                        userId: cu.id,
+                        userName: cu.name,
+                        date: dateIso,
+                        slot: _slot!,
+                        note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
+                        createdAt: DateTime.now().toIso8601String(),
+                      ));
+                    });
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('$_appliance booked for $_slot')),
+                    );
+                  },
+            child: const Text('Confirm booking'),
+          ),
+        ]),
+      ),
     );
   }
 }

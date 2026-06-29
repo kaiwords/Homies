@@ -1,8 +1,9 @@
+import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import 'state/app_state.dart';
 import 'screens/accept_invite.dart';
-import 'screens/admin_users.dart';
 import 'screens/admin_verifications.dart';
 import 'screens/finance.dart';
 import 'screens/bills.dart';
@@ -22,7 +23,6 @@ import 'screens/messages.dart';
 import 'screens/calendar.dart';
 import 'screens/my_spending.dart';
 import 'screens/necessities.dart';
-import 'screens/export.dart';
 import 'screens/maintenance_contacts.dart';
 import 'screens/welcome_guide.dart';
 import 'screens/notifications.dart';
@@ -34,18 +34,57 @@ import 'screens/tenant_performance.dart';
 import 'screens/signup.dart' show SignupScreen, InviteHandoff;
 import 'screens/subscriptions.dart';
 import 'screens/tenant_onboarding.dart';
-import 'screens/termination.dart';
+import 'screens/terms.dart';
 import 'screens/welcome.dart';
 import 'widgets/admin_shell.dart';
 import 'widgets/app_shell.dart';
 
+/// Notifies GoRouter only when auth-relevant state changes (sign-in, sign-out,
+/// role/member change). Using the full HomiesState as refreshListenable triggers
+/// a redirect re-evaluation on every mutate() call (bills, messages, etc.),
+/// which races with in-progress navigations and causes GoRouter/Navigator
+/// assertion failures.
+class _AuthRefreshNotifier extends ChangeNotifier {
+  _AuthRefreshNotifier(HomiesState state) {
+    // Firebase auth state (real sign-in / sign-out).
+    // Deferred to post-frame so we never call notifyListeners() while Flutter
+    // is mid-build / mid-navigation, which causes the lifecycle assertion.
+    fb.FirebaseAuth.instance.authStateChanges().listen((_) => _notify());
+
+    // Demo / local session changes — only fire when session.userId, role, or
+    // member actually changes, not on every unrelated mutate().
+    String? lastUserId;
+    String? lastRole;
+    bool? lastMember;
+    state.addListener(() {
+      final id = state.session.userId;
+      final role = state.currentUser?.role;
+      final member = state.currentUser?.member;
+      if (id != lastUserId || role != lastRole || member != lastMember) {
+        lastUserId = id;
+        lastRole = role;
+        lastMember = member;
+        _notify();
+      }
+    });
+  }
+
+  bool _pending = false;
+
+  void _notify() {
+    if (_pending) return;
+    _pending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _pending = false;
+      if (hasListeners) notifyListeners();
+    });
+  }
+}
+
 GoRouter buildRouter(HomiesState state) {
   return GoRouter(
     initialLocation: '/',
-    // Rebuild/re-evaluate redirects whenever auth/session state changes
-    // (login, logout, profile hydration) so gating happens declaratively
-    // instead of via context.go() during widget build.
-    refreshListenable: state,
+    refreshListenable: _AuthRefreshNotifier(state),
     redirect: (context, goState) {
       final loc = goState.uri.path;
       final inApp = loc.startsWith('/app');
@@ -65,9 +104,9 @@ GoRouter buildRouter(HomiesState state) {
       return null;
     },
     routes: [
-      GoRoute(path: '/', builder: (_, __) => const WelcomeScreen()),
-      GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
-      GoRoute(path: '/demo', builder: (_, __) => const DemoLoginScreen()),
+      GoRoute(path: '/', builder: (_, _) => const WelcomeScreen()),
+      GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
+      GoRoute(path: '/demo', builder: (_, _) => const DemoLoginScreen()),
       GoRoute(
         path: '/signup',
         builder: (_, s) {
@@ -76,44 +115,42 @@ GoRouter buildRouter(HomiesState state) {
         },
       ),
       GoRoute(path: '/invite/:code', builder: (_, s) => AcceptInviteScreen(code: s.pathParameters['code']!)),
-      GoRoute(path: '/onboarding/leaseholder', builder: (_, __) => const LeaseholderOnboardingScreen()),
-      GoRoute(path: '/onboarding/tenant', builder: (_, __) => const TenantOnboardingScreen()),
+      GoRoute(path: '/onboarding/leaseholder', builder: (_, _) => const LeaseholderOnboardingScreen()),
+      GoRoute(path: '/onboarding/tenant', builder: (_, _) => const TenantOnboardingScreen()),
       ShellRoute(
         builder: (context, state, child) => AppShell(currentLocation: state.uri.path, child: child),
         routes: [
-          GoRoute(path: '/app', builder: (_, __) => const DashboardScreen()),
-          GoRoute(path: '/app/profile', builder: (_, __) => const ProfileScreen()),
-          GoRoute(path: '/app/property', builder: (_, __) => const PropertyScreen()),
-          GoRoute(path: '/app/housemates', builder: (_, __) => const HousematesScreen()),
-          GoRoute(path: '/app/performance', builder: (_, __) => const TenantPerformanceScreen()),
-          GoRoute(path: '/app/listings', builder: (_, __) => const ListingsScreen()),
-          GoRoute(path: '/app/bills', builder: (_, __) => const BillsScreen()),
-          GoRoute(path: '/app/subscriptions', builder: (_, __) => const SubscriptionsScreen()),
-          GoRoute(path: '/app/groceries', builder: (_, __) => const GroceriesScreen()),
-          GoRoute(path: '/app/necessities', builder: (_, __) => const NecessitiesScreen()),
-          GoRoute(path: '/app/cleaning', builder: (_, __) => const CleaningScreen()),
-          GoRoute(path: '/app/rules', builder: (_, __) => const HouseRulesScreen()),
-          GoRoute(path: '/app/parties', builder: (_, __) => const PartiesScreen()),
-          GoRoute(path: '/app/messages', builder: (_, __) => const MessagesScreen()),
-          GoRoute(path: '/app/issues', builder: (_, __) => const IssuesScreen()),
-          GoRoute(path: '/app/complaints', builder: (_, __) => const ComplaintsScreen()),
-          GoRoute(path: '/app/finance', builder: (_, __) => const FinanceScreen()),
-          GoRoute(path: '/app/my-spending', builder: (_, __) => const MySpendingScreen()),
+          GoRoute(path: '/app', builder: (_, _) => const DashboardScreen()),
+          GoRoute(path: '/app/profile', builder: (_, _) => const ProfileScreen()),
+          GoRoute(path: '/app/property', builder: (_, _) => const PropertyScreen()),
+          GoRoute(path: '/app/housemates', builder: (_, _) => const HousematesScreen()),
+          GoRoute(path: '/app/performance', builder: (_, _) => const TenantPerformanceScreen()),
+          GoRoute(path: '/app/listings', builder: (_, _) => const ListingsScreen()),
+          GoRoute(path: '/app/bills', builder: (_, _) => const BillsScreen()),
+          GoRoute(path: '/app/subscriptions', builder: (_, _) => const SubscriptionsScreen()),
+          GoRoute(path: '/app/groceries', builder: (_, _) => const GroceriesScreen()),
+          GoRoute(path: '/app/necessities', builder: (_, _) => const NecessitiesScreen()),
+          GoRoute(path: '/app/cleaning', builder: (_, _) => const CleaningScreen()),
+          GoRoute(path: '/app/rules', builder: (_, _) => const HouseRulesScreen()),
+          GoRoute(path: '/app/parties', builder: (_, _) => const PartiesScreen()),
+          GoRoute(path: '/app/messages', builder: (_, _) => const MessagesScreen()),
+          GoRoute(path: '/app/issues', builder: (_, _) => const IssuesScreen()),
+          GoRoute(path: '/app/complaints', builder: (_, _) => const ComplaintsScreen()),
+          GoRoute(path: '/app/finance', builder: (_, _) => const FinanceScreen()),
+          GoRoute(path: '/app/my-spending', builder: (_, _) => const MySpendingScreen()),
           GoRoute(path: '/app/shopping', builder: (_, s) => const ShoppingListScreen()),
           GoRoute(path: '/app/notifications', builder: (_, s) => const NotificationsScreen()),
           GoRoute(path: '/app/calendar', builder: (_, s) => const CalendarScreen()),
-          GoRoute(path: '/app/export', builder: (_, __) => const ExportScreen()),
-          GoRoute(path: '/app/maintenance', builder: (_, __) => const MaintenanceContactsScreen()),
-          GoRoute(path: '/app/welcome-guide', builder: (_, __) => const WelcomeGuideScreen()),
-          GoRoute(path: '/app/leaving', builder: (_, __) => const LeavingScreen()),
-          GoRoute(path: '/app/termination', builder: (_, __) => const TerminationScreen()),
+          GoRoute(path: '/app/maintenance', builder: (_, _) => const MaintenanceContactsScreen()),
+          GoRoute(path: '/app/welcome-guide', builder: (_, _) => const WelcomeGuideScreen()),
+          GoRoute(path: '/app/leaving', builder: (_, _) => const LeavingScreen()),
+          GoRoute(path: '/app/terms', builder: (_, _) => const TermsScreen()),
         ],
       ),
       ShellRoute(
         builder: (context, state, child) => AdminShell(currentLocation: state.uri.path, child: child),
         routes: [
-          GoRoute(path: '/admin', builder: (_, __) => const AdminVerificationsScreen()),
-          GoRoute(path: '/admin/users', builder: (_, __) => const AdminUsersScreen()),
+          GoRoute(path: '/admin', builder: (_, _) => const AdminVerificationsScreen()),
         ],
       ),
     ],

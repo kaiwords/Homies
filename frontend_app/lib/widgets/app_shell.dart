@@ -15,38 +15,49 @@ class NavSection {
   const NavSection(this.path, this.label, this.icon, this.group, {this.leaseholderOnly = false});
 }
 
+// Priority order: highest-use features first within each group.
 const navSections = <NavSection>[
-  NavSection('/app', 'Dashboard', Icons.home_outlined, 'primary'),
-  NavSection('/app/profile', 'Your profile', Icons.badge_outlined, 'primary'),
-  NavSection('/app/calendar', 'Calendar', Icons.calendar_month_outlined, 'primary'),
-  NavSection('/app/property', 'Property & lease', Icons.description_outlined, 'primary'),
-  NavSection('/app/housemates', 'Housemates', Icons.people_outline, 'primary'),
-  NavSection('/app/performance', 'Tenant performance', Icons.insights_outlined, 'primary', leaseholderOnly: true),
-  NavSection('/app/finance', 'Finance', Icons.account_balance_wallet_outlined, 'money'),
-  NavSection('/app/my-spending', 'My spending', Icons.person_outlined, 'money'),
-  NavSection('/app/bills', 'Bills', Icons.receipt_long_outlined, 'money'),
-  NavSection('/app/subscriptions', 'Subscriptions', Icons.subscriptions_outlined, 'money'),
-  NavSection('/app/groceries', 'Groceries', Icons.shopping_cart_outlined, 'money'),
-  NavSection('/app/necessities', 'Necessities', Icons.cleaning_services_outlined, 'money'),
-  NavSection('/app/export', 'Export data', Icons.download_outlined, 'money'),
-  NavSection('/app/welcome-guide', 'Welcome guide', Icons.waving_hand_outlined, 'living'),
-  NavSection('/app/cleaning', 'Cleaning', Icons.cleaning_services_outlined, 'living'),
-  NavSection('/app/rules', 'House rules', Icons.gavel_outlined, 'living'),
-  NavSection('/app/parties', 'Parties', Icons.celebration_outlined, 'living'),
-  NavSection('/app/maintenance', 'Maintenance contacts', Icons.contact_phone_outlined, 'living'),
-  NavSection('/app/issues', 'House issues', Icons.build_outlined, 'living'),
-  NavSection('/app/complaints', 'Complaints', Icons.flag_outlined, 'living'),
+  // ── Core — daily essentials, no group label ─────────────────────────────────
+  NavSection('/app',            'Dashboard',   Icons.home_outlined,                   'core'),
+  NavSection('/app/finance',    'Finance',     Icons.account_balance_wallet_outlined,  'core'),
+  NavSection('/app/bills',      'Bills',       Icons.receipt_long_outlined,            'core'),
+  NavSection('/app/cleaning',   'Cleaning',    Icons.cleaning_services_outlined,       'core'),
+
+  // ── My house ─────────────────────────────────────────────────────────────────
+  NavSection('/app/housemates',   'Housemates',           Icons.people_outline,           'house'),
+  NavSection('/app/property',     'Property & lease',     Icons.description_outlined,     'house'),
+  NavSection('/app/rules',        'House rules',          Icons.gavel_outlined,           'house'),
+  NavSection('/app/calendar',     'Calendar',             Icons.calendar_month_outlined,  'house'),
+  NavSection('/app/maintenance',  'Maintenance contacts', Icons.contact_phone_outlined,   'house'),
+
+  // ── Money ─────────────────────────────────────────────────────────────────────
+  NavSection('/app/subscriptions', 'Subscriptions', Icons.subscriptions_outlined,  'money'),
+  NavSection('/app/groceries',     'Groceries',     Icons.shopping_cart_outlined,   'money'),
+  NavSection('/app/necessities',   'Necessities',   Icons.soap_outlined,            'money'),
+
+  // ── Activities ────────────────────────────────────────────────────────────────
+  NavSection('/app/parties',    'Parties',      Icons.celebration_outlined, 'activities'),
+  NavSection('/app/issues',     'House issues', Icons.build_outlined,       'activities'),
+  NavSection('/app/complaints', 'Complaints',   Icons.flag_outlined,        'activities'),
+
+  // ── Marketplace ───────────────────────────────────────────────────────────────
   NavSection('/app/listings', 'Rooms & housemates', Icons.storefront_outlined, 'marketplace'),
-  NavSection('/app/leaving', 'Leaving', Icons.logout_outlined, 'exit'),
-  NavSection('/app/termination', 'End of lease', Icons.event_busy_outlined, 'exit', leaseholderOnly: true),
+
+  // ── Account ───────────────────────────────────────────────────────────────────
+  NavSection('/app/profile',      'Your profile',     Icons.badge_outlined,      'account'),
+  NavSection('/app/performance',  'Tenant performance', Icons.insights_outlined,  'account', leaseholderOnly: true),
+  NavSection('/app/leaving',      'Leaving',          Icons.logout_outlined,     'account'),
 ];
 
+const _drawerGroups = ['core', 'house', 'money', 'activities', 'marketplace', 'account'];
+
 const groupLabels = {
-  'primary': '',
-  'money': 'Money',
-  'living': 'Living together',
+  'core':        '',             // no label — top-level items need no heading
+  'house':       'My house',
+  'money':       'Money',
+  'activities':  'Activities',
   'marketplace': 'Marketplace',
-  'exit': 'Wrap up',
+  'account':     'Account',
 };
 
 const bottomNavPaths = ['/app', '/app/finance', '/app/cleaning', '/app/messages'];
@@ -72,18 +83,16 @@ class AppShell extends StatelessWidget {
     final state = HomiesScope.of(context);
     final user = state.currentUser;
     if (user == null) {
-      // The router redirect sends unauthenticated users to /login; this is
-      // just the transient frame before that redirect runs.
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    // People who haven't been invited into the house only get the marketplace.
     if (!user.member) {
       return _MarketplaceOnlyShell(currentLocation: currentLocation, user: user, child: child);
     }
+
     final activeCount = state.activeHousemates.length;
     final pendingComplaints = state.complaints.where((c) => c.status == 'open').length;
     final pendingTasks = state.cleaningTasks.where((t) => !t.done && (t.excuse == null || t.excuse!.isEmpty)).length;
-    final uid = state.currentUser!.id;
+    final uid = user.id;
     final now = DateTime.now();
     final upcomingBills = state.bills.where((b) {
       if (b.paidBy[uid] == true) return false;
@@ -93,6 +102,7 @@ class AppShell extends StatelessWidget {
           due.isBefore(now.add(const Duration(days: 8)));
     }).length;
     final notifCount = pendingTasks + upcomingBills;
+    final unreadAppNotifs = state.appNotifications.where((n) => n.forUserId == uid && !n.isRead).length;
 
     return Scaffold(
       appBar: AppBar(
@@ -100,15 +110,23 @@ class AppShell extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(state.property.address,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+            Text(
+              state.property.address,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: HomiesColors.text),
+              overflow: TextOverflow.ellipsis,
+            ),
             Text(
               '${state.property.bedrooms}-bed · $activeCount living here',
-              style: const TextStyle(fontSize: 11, color: HomiesColors.textDim),
+              style: const TextStyle(fontSize: 11, color: HomiesColors.textFaint),
             ),
           ],
         ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: HomiesColors.border),
+        ),
         actions: [
+          // Notification bell with activity badge
           Stack(
             alignment: Alignment.center,
             children: [
@@ -119,115 +137,329 @@ class AppShell extends StatelessWidget {
               ),
               if (notifCount > 0)
                 Positioned(
-                  top: 8,
-                  right: 8,
+                  top: 10,
+                  right: 10,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    width: 16,
+                    height: 16,
                     decoration: BoxDecoration(
                       color: HomiesColors.danger,
-                      borderRadius: BorderRadius.circular(10),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: HomiesColors.surface, width: 1.5),
                     ),
-                    child: Text(
-                      '$notifCount',
-                      style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700),
+                    child: Center(
+                      child: Text(
+                        '$notifCount',
+                        style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700),
+                      ),
                     ),
                   ),
                 ),
             ],
           ),
+
+          // Settings gear with unread-app-notif dot
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: PopupMenuButton<String>(
-              offset: const Offset(0, 40),
-              child: Padding(padding: const EdgeInsets.all(4), child: Avatar.sm(user)),
-              itemBuilder: (_) => [
-                PopupMenuItem(
-                  value: 'profile',
-                  child: ListTile(
-                    leading: Avatar.sm(user),
-                    title: Text(user.name.replaceAll(RegExp(r'^You \('), '').replaceAll(RegExp(r'\)$'), '')),
-                    subtitle: Text(user.role),
+            padding: const EdgeInsets.only(right: 10, left: 0),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.settings_outlined),
+                  tooltip: 'Settings',
+                  onPressed: () => showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (_) => const _SettingsSheet(),
                   ),
                 ),
-                const PopupMenuDivider(),
-                const PopupMenuItem(
-                  value: 'switch',
-                  child: ListTile(
-                    leading: Icon(Icons.swap_horiz_rounded),
-                    title: Text('Switch demo account'),
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
+                if (unreadAppNotifs > 0)
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: HomiesColors.accent,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: HomiesColors.surface, width: 1),
+                      ),
+                    ),
                   ),
-                ),
-                const PopupMenuItem(value: 'signout', child: Text('Sign out')),
               ],
-              onSelected: (v) async {
-                if (v == 'switch') {
-                  if (context.mounted) context.push('/demo');
-                } else if (v == 'signout') {
-                  await state.signOut();
-                  if (context.mounted) context.go('/login');
-                }
-              },
             ),
           ),
         ],
       ),
+
       drawer: Drawer(
         backgroundColor: HomiesColors.surface,
+        width: 272,
         child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              // Logo header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
                 child: Row(children: [
-                  Icon(Icons.circle, color: HomiesColors.accent, size: 12),
-                  SizedBox(width: 8),
-                  Text('homies', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18)),
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: HomiesColors.accent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.home_rounded, color: Colors.white, size: 16),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'homies',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17, color: HomiesColors.text, letterSpacing: -0.3),
+                  ),
                 ]),
               ),
-              for (final group in ['primary', 'money', 'living', 'marketplace', 'exit']) ...[
-                if (group != 'primary')
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 6),
-                    child: Text(groupLabels[group]!.toUpperCase(),
-                        style: const TextStyle(fontSize: 11, color: HomiesColors.textFaint, letterSpacing: 0.7, fontWeight: FontWeight.w600)),
-                  ),
-                for (final s in navSections.where((n) =>
-                    n.group == group && (user.role == 'leaseholder' || !n.leaseholderOnly)))
-                  _DrawerItem(
-                    section: s,
-                    active: currentLocation == s.path,
-                    badge: s.label == 'Complaints' && pendingComplaints > 0
-                        ? pendingComplaints
-                        : s.label == 'Cleaning' && pendingTasks > 0
-                            ? pendingTasks
-                            : null,
-                  ),
-              ],
+              Container(height: 1, color: HomiesColors.border),
+
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 16),
+                  children: [
+                    for (final group in _drawerGroups) ...[
+                      if (groupLabels[group]!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 16, 12, 5),
+                          child: Text(
+                            groupLabels[group]!.toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: HomiesColors.textFaint,
+                              letterSpacing: 1.0,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      for (final s in navSections.where((n) =>
+                          n.group == group && (user.role == 'leaseholder' || !n.leaseholderOnly)))
+                        _DrawerItem(
+                          section: s,
+                          active: currentLocation == s.path,
+                          badge: s.path == '/app/complaints' && pendingComplaints > 0
+                              ? pendingComplaints
+                              : s.path == '/app/cleaning' && pendingTasks > 0
+                                  ? pendingTasks
+                                  : null,
+                        ),
+                    ],
+                  ],
+                ),
+              ),
             ],
           ),
         ),
       ),
-      body: child,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _bottomIndex,
-        onTap: (i) => context.go(bottomNavPaths[i]),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet_outlined), label: 'Finance'),
-          BottomNavigationBarItem(icon: Icon(Icons.cleaning_services_outlined), label: 'Cleaning'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
+
+      // Keyed AnimatedSwitcher gives a smooth fade+rise between pages
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 240),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeIn,
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween<Offset>(begin: const Offset(0, 0.016), end: Offset.zero)
+                .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+            child: child,
+          ),
+        ),
+        child: KeyedSubtree(key: ValueKey(currentLocation), child: child),
+      ),
+
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: HomiesColors.border)),
+          color: HomiesColors.surface,
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _bottomIndex,
+          onTap: (i) => context.go(bottomNavPaths[i]),
+          backgroundColor: Colors.transparent,
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.home_outlined),                    activeIcon: Icon(Icons.home_rounded),                    label: 'Home'),
+            BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet_outlined),  activeIcon: Icon(Icons.account_balance_wallet_rounded),  label: 'Finance'),
+            BottomNavigationBarItem(icon: Icon(Icons.cleaning_services_outlined),       activeIcon: Icon(Icons.cleaning_services_rounded),       label: 'Cleaning'),
+            BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline),              activeIcon: Icon(Icons.chat_bubble_rounded),             label: 'Chat'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Settings sheet ───────────────────────────────────────────────────────────
+
+class _SettingsSheet extends StatelessWidget {
+  const _SettingsSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final user = state.currentUser!;
+    final displayName = user.name.replaceAll(RegExp(r'^You \('), '').replaceAll(RegExp(r'\)$'), '');
+    final unreadNotifs = state.appNotifications.where((n) => n.forUserId == user.id && !n.isRead).length;
+
+    return SafeArea(
+      top: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Handle
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(top: 12, bottom: 4),
+              decoration: BoxDecoration(color: HomiesColors.border, borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+
+          // Profile header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Row(children: [
+              Avatar(user: user),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(displayName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: HomiesColors.text)),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: HomiesColors.accentSoft,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      user.role[0].toUpperCase() + user.role.substring(1),
+                      style: const TextStyle(fontSize: 11, color: HomiesColors.accentStrong, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ]),
+              ),
+            ]),
+          ),
+
+          Container(height: 1, color: HomiesColors.border),
+
+          _SettingsTile(
+            icon: Icons.notifications_outlined,
+            label: 'Notifications',
+            badge: unreadNotifs,
+            onTap: () {
+              Navigator.pop(context);
+              context.go('/app/notifications');
+            },
+          ),
+          _SettingsTile(
+            icon: Icons.badge_outlined,
+            label: 'Your profile',
+            onTap: () {
+              Navigator.pop(context);
+              context.go('/app/profile');
+            },
+          ),
+          _SettingsTile(
+            icon: Icons.insights_outlined,
+            label: 'Tenant performance',
+            onTap: () {
+              Navigator.pop(context);
+              context.go('/app/performance');
+            },
+          ),
+          _SettingsTile(
+            icon: Icons.gavel_outlined,
+            label: 'Terms & conditions',
+            onTap: () {
+              Navigator.pop(context);
+              context.go('/app/terms');
+            },
+          ),
+
+          Container(height: 1, color: HomiesColors.border),
+
+          _SettingsTile(
+            icon: Icons.swap_horiz_rounded,
+            label: 'Switch demo account',
+            onTap: () {
+              Navigator.pop(context);
+              context.push('/demo');
+            },
+          ),
+          _SettingsTile(
+            icon: Icons.logout_rounded,
+            label: 'Sign out',
+            color: HomiesColors.danger,
+            onTap: () async {
+              Navigator.pop(context);
+              await state.signOut();
+              if (context.mounted) context.go('/login');
+            },
+          ),
+
+          const SizedBox(height: 16),
         ],
       ),
     );
   }
 }
 
-/// Chrome shown to people who have an account but haven't been invited into
-/// the house yet — they can only browse the marketplace. Any other /app route
-/// is bounced back to the listings page.
+class _SettingsTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final int badge;
+  final Color? color;
+  final VoidCallback onTap;
+
+  const _SettingsTile({
+    required this.icon,
+    required this.label,
+    this.badge = 0,
+    this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = color ?? HomiesColors.text;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+        child: Row(children: [
+          Icon(icon, size: 20, color: color ?? HomiesColors.textDim),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(label, style: TextStyle(fontSize: 14, color: fg, fontWeight: FontWeight.w500)),
+          ),
+          if (badge > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(color: HomiesColors.accent, borderRadius: BorderRadius.circular(20)),
+              child: Text('$badge', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+            ),
+          if (color == null)
+            const Icon(Icons.chevron_right, size: 18, color: HomiesColors.textFaint),
+        ]),
+      ),
+    );
+  }
+}
+
+// ─── Marketplace-only shell (non-member) ─────────────────────────────────────
+
 class _MarketplaceOnlyShell extends StatelessWidget {
   final String currentLocation;
   final User user;
@@ -237,39 +469,57 @@ class _MarketplaceOnlyShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = HomiesScope.of(context);
-    // Non-members are redirected to /app/listings by the router, so by the
-    // time this shell renders we're always on the marketplace.
 
     return Scaffold(
       appBar: AppBar(
-        title: Column(
+        title: const Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
+          children: [
             Text('Marketplace', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-            Text('Get invited to unlock your house', style: TextStyle(fontSize: 11, color: HomiesColors.textDim)),
+            Text('Get invited to unlock your house', style: TextStyle(fontSize: 11, color: HomiesColors.textFaint)),
           ],
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: HomiesColors.border),
         ),
         actions: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: PopupMenuButton<String>(
-              offset: const Offset(0, 40),
-              child: Padding(padding: const EdgeInsets.all(4), child: Avatar.sm(user)),
-              itemBuilder: (_) => [
-                PopupMenuItem(
-                  value: 'profile',
-                  child: ListTile(leading: Avatar.sm(user), title: Text(user.name), subtitle: const Text('Browsing')),
+            padding: const EdgeInsets.only(right: 10),
+            child: IconButton(
+              icon: const Icon(Icons.settings_outlined),
+              tooltip: 'Settings',
+              onPressed: () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => SafeArea(
+                  top: false,
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Container(
+                      width: 40, height: 4,
+                      margin: const EdgeInsets.symmetric(vertical: 10),
+                      decoration: BoxDecoration(color: HomiesColors.textFaint, borderRadius: BorderRadius.circular(2)),
+                    ),
+                    ListTile(
+                      leading: Avatar.sm(user),
+                      title: Text(user.name),
+                      subtitle: const Text('Browsing'),
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.logout_rounded, color: HomiesColors.danger),
+                      title: const Text('Sign out', style: TextStyle(color: HomiesColors.danger)),
+                      onTap: () async {
+                        Navigator.pop(context);
+                        await state.signOut();
+                        if (context.mounted) context.go('/login');
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                  ]),
                 ),
-                const PopupMenuDivider(),
-                const PopupMenuItem(value: 'signout', child: Text('Sign out')),
-              ],
-              onSelected: (v) async {
-                if (v == 'signout') {
-                  await state.signOut();
-                  if (context.mounted) context.go('/login');
-                }
-              },
+              ),
             ),
           ),
         ],
@@ -279,6 +529,8 @@ class _MarketplaceOnlyShell extends StatelessWidget {
   }
 }
 
+// ─── Drawer item ──────────────────────────────────────────────────────────────
+
 class _DrawerItem extends StatelessWidget {
   final NavSection section;
   final bool active;
@@ -287,27 +539,63 @@ class _DrawerItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      dense: true,
-      leading: Icon(section.icon, color: active ? HomiesColors.accent : HomiesColors.textDim, size: 22),
-      title: Text(section.label,
-          style: TextStyle(
-              color: active ? HomiesColors.accentStrong : HomiesColors.text,
-              fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-              fontSize: 14)),
-      trailing: badge != null
-          ? Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-              decoration: BoxDecoration(color: HomiesColors.accent, borderRadius: BorderRadius.circular(20)),
-              child: Text('$badge', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
-            )
-          : null,
-      tileColor: active ? HomiesColors.accentSoft : null,
-      onTap: () {
-        final nav = Navigator.of(context);
-        if (nav.canPop()) nav.pop(); // close the drawer if it's open
-        context.go(section.path);
-      },
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(11),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(11),
+          onTap: () {
+            final nav = Navigator.of(context);
+            if (nav.canPop()) nav.pop();
+            context.go(section.path);
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeInOut,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: active ? HomiesColors.accentSoft : Colors.transparent,
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Row(children: [
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 160),
+                child: Icon(
+                  section.icon,
+                  key: ValueKey(active),
+                  color: active ? HomiesColors.accent : HomiesColors.textFaint,
+                  size: 19,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  section.label,
+                  style: TextStyle(
+                    color: active ? HomiesColors.accentStrong : HomiesColors.text,
+                    fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              if (badge != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: HomiesColors.danger,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '$badge',
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                  ),
+                ),
+            ]),
+          ),
+        ),
+      ),
     );
   }
 }

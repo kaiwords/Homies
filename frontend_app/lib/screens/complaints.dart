@@ -27,7 +27,7 @@ class ComplaintsScreen extends StatelessWidget {
 
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           PageHead(
             title: 'Complaints',
@@ -177,14 +177,26 @@ class _ComplaintModalState extends State<_ComplaintModal> {
                 onPressed: reasonCtrl.text.trim().isEmpty || against == null
                     ? null
                     : () {
+                        final cu = state.currentUser!;
+                        final accused = state.findUser(against!);
                         state.mutate(() => state.complaints.insert(0, Complaint(
                               id: 'co-${Random().nextInt(0xFFFF).toRadixString(36)}',
                               against: against!,
-                              from: state.currentUser!.id,
+                              from: cu.id,
                               reason: reasonCtrl.text.trim(),
                               severity: severity.round(),
                               date: todayIso(),
                             )));
+                        if (accused != null) {
+                          state.addAppNotification(AppNotification(
+                            id: 'complaint_${DateTime.now().millisecondsSinceEpoch}',
+                            kind: 'complaint',
+                            title: 'New complaint filed against you',
+                            body: '${cu.name} filed a complaint: "${reasonCtrl.text.trim()}"',
+                            at: DateTime.now().toIso8601String(),
+                            forUserId: accused.id,
+                          ));
+                        }
                         Navigator.pop(context);
                       },
                 style: ElevatedButton.styleFrom(backgroundColor: HomiesColors.danger),

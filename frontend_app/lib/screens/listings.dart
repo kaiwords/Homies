@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../state/app_state.dart';
@@ -8,6 +9,7 @@ import '../state/models.dart';
 import '../theme.dart';
 import '../util/format.dart';
 import '../widgets/avatar.dart';
+import '../widgets/file_picker_button.dart';
 import '../widgets/lifestyle_fields.dart';
 import '../widgets/ui_kit.dart';
 import 'post_thread.dart';
@@ -39,6 +41,12 @@ bool _has(User u, String key) {
 }
 
 String _rid(String prefix) => '$prefix-${Random().nextInt(0xFFFFFF).toRadixString(36)}';
+
+bool _isOlderThanOneMonth(String createdAt) {
+  final created = DateTime.tryParse(createdAt);
+  if (created == null) return false;
+  return DateTime.now().difference(created).inDays > 30;
+}
 
 Set<String> _participantsFor(HomiesState s, Listing l) {
   final others = <String>{};
@@ -78,6 +86,7 @@ class ListingsScreen extends StatefulWidget {
 
 class _ListingsScreenState extends State<ListingsScreen> {
   String tab = 'tenant-wanted';
+  bool _showArchive = false;
   final _locationCtrl = TextEditingController();
 
   // Filter values — null means "no filter applied"
@@ -127,12 +136,22 @@ class _ListingsScreenState extends State<ListingsScreen> {
     final locationQ = _locationCtrl.text.trim().toLowerCase();
     final listings = state.listings.where((l) {
       if (l.type != tab || l.status != 'open') return false;
+      if (_isOlderThanOneMonth(l.createdAt)) return false;
       if (locationQ.isNotEmpty && !l.suburb.toLowerCase().contains(locationQ)) return false;
       if (_genderFilter != null && _genderFilter != 'any' && l.genderPref != null && l.genderPref != 'any' && l.genderPref != _genderFilter) return false;
       if (_smokingFilter != null && l.smokingPref != null && l.smokingPref != _smokingFilter) return false;
       if (_alcoholFilter != null && l.alcoholPref != null && l.alcoholPref != _alcoholFilter) return false;
       if (_billsFilter == true && !l.billsIncluded) return false;
       return true;
+    }).toList();
+
+    final archivedListings = state.listings.where((l) {
+      if (l.type != tab) return false;
+      if (!_isOlderThanOneMonth(l.createdAt)) return false;
+      return l.by == cu.id ||
+          state.listingInterests.any((i) => i.listingId == l.id && (i.from == cu.id || i.to == cu.id)) ||
+          state.postMessages.any((m) => m.listingId == l.id && (m.from == cu.id || m.to == cu.id)) ||
+          state.inspections.any((i) => i.listingId == l.id && (i.requestedBy == cu.id || i.to == cu.id));
     }).toList();
 
     final inbox = state.listingInterests.where((i) => i.to == cu.id).toList();
@@ -144,7 +163,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
 
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           PageHead(
             title: 'Rooms & housemates',
@@ -292,6 +311,44 @@ class _ListingsScreenState extends State<ListingsScreen> {
             const SizedBox(height: 8),
             const Text('Your inspections', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             for (final i in myInspections) _InspectionCard(inspection: i, incoming: false),
+          ],
+
+          // Leaseholder complaint section — tenants only
+          if (cu.member && !isLeaseholder) ...[
+            const SizedBox(height: 8),
+            _LeaseholderReportBanner(cu: cu),
+          ],
+
+          // Archive: posts older than 30 days the current user interacted with
+          if (archivedListings.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            const Divider(height: 1, color: HomiesColors.border),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: () => setState(() => _showArchive = !_showArchive),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(children: [
+                  const Icon(Icons.archive_outlined, size: 18, color: HomiesColors.textDim),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Archive · ${archivedListings.length} post${archivedListings.length == 1 ? '' : 's'} over 30 days old',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: HomiesColors.textDim),
+                  ),
+                  const Spacer(),
+                  Icon(_showArchive ? Icons.expand_less : Icons.expand_more, color: HomiesColors.textDim, size: 18),
+                ]),
+              ),
+            ),
+            if (_showArchive)
+              ...archivedListings.map((l) => Opacity(
+                    opacity: 0.65,
+                    child: _PostCard(
+                      listing: l,
+                      mine: l.by == cu.id,
+                      alreadySent: sent.any((i) => i.listingId == l.id),
+                    ),
+                  )),
           ],
         ]),
       ),
@@ -496,7 +553,7 @@ class _FilterSheetState extends State<_FilterSheet> {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
             const Text('Filters', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
@@ -589,7 +646,7 @@ class _PostCard extends StatelessWidget {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Container(
-          height: 4,
+          height: 3,
           decoration: BoxDecoration(
             color: isRoom ? HomiesColors.accent : const Color(0xFF356190),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
@@ -619,6 +676,7 @@ class _PostCard extends StatelessWidget {
                       style: const TextStyle(color: HomiesColors.textDim, fontSize: 12)),
                 ]),
               ),
+              _PostCardMenu(listing: listing, mine: mine),
             ]),
             const SizedBox(height: 12),
             Text(listing.title,
@@ -639,6 +697,10 @@ class _PostCard extends StatelessWidget {
                 child: Text(listing.description,
                     style: const TextStyle(fontSize: 13, height: 1.4, color: HomiesColors.text)),
               ),
+            if (!mine && by?.role == 'leaseholder') ...[
+              const SizedBox(height: 12),
+              _LhReputationSection(leaseholderId: listing.by),
+            ],
             const Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),
                 child: Divider(height: 1, color: HomiesColors.border)),
@@ -803,6 +865,192 @@ class _PostCard extends StatelessWidget {
   }
 }
 
+// ─── Post card menu (share / report) ─────────────────────────────────────────
+
+class _PostCardMenu extends StatelessWidget {
+  final Listing listing;
+  final bool mine;
+  const _PostCardMenu({required this.listing, required this.mine});
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert, size: 18, color: HomiesColors.textFaint),
+      padding: EdgeInsets.zero,
+      itemBuilder: (_) => [
+        const PopupMenuItem(
+          value: 'share',
+          child: ListTile(
+            leading: Icon(Icons.share_outlined),
+            title: Text('Share post'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        if (!mine)
+          const PopupMenuItem(
+            value: 'report',
+            child: ListTile(
+              leading: Icon(Icons.flag_outlined, color: HomiesColors.danger),
+              title: Text('Report post', style: TextStyle(color: HomiesColors.danger)),
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+      ],
+      onSelected: (v) {
+        if (v == 'share') _share(context);
+        if (v == 'report') _report(context);
+      },
+    );
+  }
+
+  void _share(BuildContext context) {
+    final isRoom = listing.type == 'tenant-wanted';
+    final priceText = isRoom && listing.rent != null
+        ? '\$${listing.rent!.toStringAsFixed(0)}/wk'
+        : (!isRoom && listing.budget != null)
+            ? 'Budget \$${listing.budget!.toStringAsFixed(0)}/wk'
+            : '';
+    final parts = [
+      listing.title,
+      '${listing.suburb}${priceText.isNotEmpty ? ' · $priceText' : ''}',
+      if (listing.description.isNotEmpty) listing.description,
+    ];
+    Clipboard.setData(ClipboardData(text: parts.join('\n')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Post details copied to clipboard')),
+    );
+  }
+
+  void _report(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: _ReportPostModal(listing: listing),
+      ),
+    );
+  }
+}
+
+// ─── Report post modal ────────────────────────────────────────────────────────
+
+class _ReportPostModal extends StatefulWidget {
+  final Listing listing;
+  const _ReportPostModal({required this.listing});
+
+  @override
+  State<_ReportPostModal> createState() => _ReportPostModalState();
+}
+
+class _ReportPostModalState extends State<_ReportPostModal> {
+  String? _category;
+  final _reasonCtrl = TextEditingController();
+
+  static const _categories = <(String, String)>[
+    ('spam', 'Spam or misleading'),
+    ('fake', 'Fake or scam listing'),
+    ('inappropriate', 'Inappropriate content'),
+    ('duplicate', 'Duplicate post'),
+    ('other', 'Other'),
+  ];
+
+  @override
+  void dispose() {
+    _reasonCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _canSubmit => _category != null;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final cu = state.currentUser!;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(color: HomiesColors.dangerSoft, borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.flag_outlined, size: 22, color: HomiesColors.danger),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Report this post', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                Text('"${widget.listing.title}"',
+                    style: const TextStyle(fontSize: 12, color: HomiesColors.textDim),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+              ]),
+            ),
+          ]),
+          const SizedBox(height: 16),
+          const FieldLabel('Reason for reporting'),
+          DropdownButtonFormField<String>(
+            hint: const Text('Select a reason'),
+            initialValue: _category,
+            items: [
+              for (final c in _categories)
+                DropdownMenuItem(value: c.$1, child: Text(c.$2, style: const TextStyle(fontSize: 13))),
+            ],
+            onChanged: (v) => setState(() => _category = v),
+          ),
+          const SizedBox(height: 12),
+          const FieldLabel('Details (optional)'),
+          TextField(
+            controller: _reasonCtrl,
+            maxLines: 3,
+            decoration: const InputDecoration(hintText: 'Anything specific to help us review this post…'),
+          ),
+          const SizedBox(height: 20),
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: _canSubmit
+                  ? () {
+                      final catLabel = _categories.firstWhere((c) => c.$1 == _category).$2;
+                      final detail = _reasonCtrl.text.trim();
+                      state.mutate(() => state.complaints.insert(
+                            0,
+                            Complaint(
+                              id: 'rpt-${Random().nextInt(0xFFFFFF).toRadixString(36)}',
+                              against: widget.listing.by,
+                              from: cu.id,
+                              reason: detail.isNotEmpty ? '$catLabel: $detail' : catLabel,
+                              severity: 1,
+                              date: DateTime.now().toIso8601String().substring(0, 10),
+                              kind: 'listing',
+                              category: _category,
+                            ),
+                          ));
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Report submitted. Thanks for keeping Homies safe.')),
+                      );
+                    }
+                  : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: HomiesColors.danger,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Submit report'),
+            ),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
 // ─── Interest card ────────────────────────────────────────────────────────────
 
 class _InterestCard extends StatelessWidget {
@@ -854,7 +1102,7 @@ class _InterestCard extends StatelessWidget {
                     color: HomiesColors.textDim,
                     letterSpacing: 0.5,
                     fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             for (final f in _shareable)
               if ((interest.sharedFields[f.$1] ?? '').isNotEmpty)
                 Padding(
@@ -975,7 +1223,7 @@ class _ListingModalState extends State<_ListingModal> {
                         : 'Quiet professional after a room near the city',
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
 
                 const FieldLabel('Suburb / location'),
                 TextField(
@@ -983,7 +1231,7 @@ class _ListingModalState extends State<_ListingModal> {
                   onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(hintText: 'Marrickville'),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
 
                 FieldLabel(_isRoom ? 'Rent (\$/week)' : 'Budget (\$/week)'),
                 TextField(
@@ -991,7 +1239,7 @@ class _ListingModalState extends State<_ListingModal> {
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(hintText: '0'),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
 
                 FieldLabel(_isRoom ? 'Available from' : 'Move in by'),
                 OutlinedButton(
@@ -1006,7 +1254,7 @@ class _ListingModalState extends State<_ListingModal> {
                         : fmtDate(toIso(availableFrom))),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
 
                 const FieldLabel('Description'),
                 TextField(
@@ -1046,7 +1294,7 @@ class _ListingModalState extends State<_ListingModal> {
                 const SizedBox(height: 14),
                 const Text('Lifestyle preferences',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
 
                 const FieldLabel('Alcohol'),
                 _PrefRow(
@@ -1054,7 +1302,7 @@ class _ListingModalState extends State<_ListingModal> {
                   value: alcoholPref,
                   onChanged: (v) => setState(() => alcoholPref = v),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
 
                 const FieldLabel('Smoking'),
                 _PrefRow(
@@ -1062,7 +1310,7 @@ class _ListingModalState extends State<_ListingModal> {
                   value: smokingPref,
                   onChanged: (v) => setState(() => smokingPref = v),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
 
                 const FieldLabel('Gender preference'),
                 _PrefRow(
@@ -1207,7 +1455,7 @@ class _ShareInfoModalState extends State<_ShareInfoModal> {
                   'Applying shares your lifestyle answers and emergency contact with the leaseholder, plus the contact details you tick below.',
                   style: TextStyle(color: HomiesColors.textDim, fontSize: 12),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
                 const FieldLabel('Share these details'),
                 for (final f in _shareable)
                   CheckboxListTile(
@@ -1234,7 +1482,7 @@ class _ShareInfoModalState extends State<_ShareInfoModal> {
                 ] else
                   HomiesCard(
                     color: HomiesColors.surface2,
-                    borderColor: HomiesColors.warnSoft,
+                    borderColor: HomiesColors.warnBorder,
                     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                       const Text('Complete your profile to apply',
                           style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
@@ -1363,13 +1611,13 @@ class _InspectionModalState extends State<_InspectionModal> {
                     child: Text(_date == null ? 'Pick a date' : fmtDate(toIso(_date))),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
                 const FieldLabel('Preferred time'),
                 TextField(
                     controller: _slotCtrl,
                     onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(hintText: 'e.g. 10:00 am or after 5pm')),
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
                 const FieldLabel('Note (optional)'),
                 TextField(
                     controller: _noteCtrl,
@@ -1488,8 +1736,8 @@ class _PerfRequestBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return HomiesCard(
-      borderColor: HomiesColors.accentSoft,
-      color: HomiesColors.accentSoft,
+      borderColor: HomiesColors.accentBorder,
+      color: HomiesColors.accentBorder,
       child: Row(children: [
         const Icon(Icons.workspace_premium_rounded, size: 22, color: HomiesColors.accent),
         const SizedBox(width: 12),
@@ -1510,6 +1758,735 @@ class _PerfRequestBanner extends StatelessWidget {
         const SizedBox(width: 8),
         ElevatedButton(onPressed: onOpen, child: const Text('Respond')),
       ]),
+    );
+  }
+}
+
+// ─── Leaseholder reputation (on listing cards — tenant browsing) ─────────────
+
+class _LhReputationSection extends StatelessWidget {
+  final String leaseholderId;
+  const _LhReputationSection({required this.leaseholderId});
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final cu = state.currentUser!;
+    final reviews = state.lhReviews.where((r) => r.leaseholderId == leaseholderId).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    final complaints = state.complaints
+        .where((c) => c.kind == 'leaseholder' && c.against == leaseholderId)
+        .toList();
+    final avgRating = reviews.isEmpty
+        ? null
+        : reviews.map((r) => r.rating).reduce((a, b) => a + b) / reviews.length;
+    final alreadyReviewed = reviews.any((r) => r.fromUserId == cu.id);
+    final isTenant = cu.role != 'leaseholder';
+
+    final cCount = complaints.length;
+    final complaintTone = cCount == 0
+        ? ChipTone.ok
+        : cCount <= 2
+            ? ChipTone.warn
+            : ChipTone.danger;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: HomiesColors.surface2,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: HomiesColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.shield_outlined, size: 14, color: HomiesColors.textDim),
+          const SizedBox(width: 5),
+          const Text('Leaseholder reputation',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: HomiesColors.textDim)),
+          const Spacer(),
+          if (isTenant && !alreadyReviewed)
+            GestureDetector(
+              onTap: () => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => Padding(
+                  padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+                  child: _LhReviewModal(leaseholderId: leaseholderId),
+                ),
+              ),
+              child: const Text('+ Leave a review',
+                  style: TextStyle(fontSize: 11, color: HomiesColors.accent, fontWeight: FontWeight.w600)),
+            ),
+          if (alreadyReviewed)
+            const Text('You reviewed this leaseholder',
+                style: TextStyle(fontSize: 11, color: HomiesColors.textFaint)),
+        ]),
+        const SizedBox(height: 8),
+
+        Wrap(spacing: 6, runSpacing: 4, children: [
+          HomiesChip(
+            cCount == 0 ? 'No complaints' : '$cCount complaint${cCount == 1 ? '' : 's'}',
+            tone: complaintTone,
+          ),
+          if (avgRating != null)
+            HomiesChip('★ ${avgRating.toStringAsFixed(1)} · ${reviews.length} review${reviews.length == 1 ? '' : 's'}',
+                tone: ChipTone.neutral),
+          if (reviews.isEmpty)
+            const HomiesChip('No reviews yet'),
+        ]),
+
+        if (reviews.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          _LhReviewTile(review: reviews.first),
+          if (reviews.length > 1) ...[
+            const SizedBox(height: 6),
+            _LockedMoreReviews(count: reviews.length - 1),
+          ],
+        ],
+      ]),
+    );
+  }
+}
+
+class _LhReviewTile extends StatelessWidget {
+  final LeaseholderReview review;
+  const _LhReviewTile({required this.review});
+
+  @override
+  Widget build(BuildContext context) {
+    final r = review;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: HomiesColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: HomiesColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Row(children: [
+            for (var i = 1; i <= 5; i++)
+              Icon(i <= r.rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                  size: 13, color: i <= r.rating ? const Color(0xFFF6AD55) : HomiesColors.textFaint),
+          ]),
+          const SizedBox(width: 6),
+          Text(r.anonymous ? 'Anonymous tenant' : r.fromUserName,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: HomiesColors.textDim)),
+          const Spacer(),
+          Text(fmtDate(r.date), style: const TextStyle(fontSize: 10, color: HomiesColors.textFaint)),
+        ]),
+        const SizedBox(height: 4),
+        Text(r.body, style: const TextStyle(fontSize: 12, height: 1.4), maxLines: 3, overflow: TextOverflow.ellipsis),
+      ]),
+    );
+  }
+}
+
+class _LockedMoreReviews extends StatelessWidget {
+  final int count;
+  const _LockedMoreReviews({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: HomiesColors.surface2,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: HomiesColors.border),
+      ),
+      child: Row(children: [
+        const Icon(Icons.lock_outline, size: 15, color: HomiesColors.textFaint),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            '$count more review${count == 1 ? '' : 's'} — unlock with Premium',
+            style: const TextStyle(fontSize: 12, color: HomiesColors.textDim),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: HomiesColors.surface,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: HomiesColors.border),
+          ),
+          child: const Text('Coming soon', style: TextStyle(fontSize: 10, color: HomiesColors.textFaint)),
+        ),
+      ]),
+    );
+  }
+}
+
+// ─── Leave a review modal ─────────────────────────────────────────────────────
+
+class _LhReviewModal extends StatefulWidget {
+  final String leaseholderId;
+  const _LhReviewModal({required this.leaseholderId});
+
+  @override
+  State<_LhReviewModal> createState() => _LhReviewModalState();
+}
+
+class _LhReviewModalState extends State<_LhReviewModal> {
+  int rating = 3;
+  final bodyCtrl = TextEditingController();
+  bool anonymous = false;
+
+  @override
+  void dispose() {
+    bodyCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _canSubmit => bodyCtrl.text.trim().length >= 10;
+
+  void _submit() {
+    final state = HomiesScope.of(context);
+    final cu = state.currentUser!;
+    state.addLhReview(LeaseholderReview(
+      id: 'lhr-${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}',
+      leaseholderId: widget.leaseholderId,
+      fromUserId: cu.id,
+      fromUserName: cu.name,
+      anonymous: anonymous,
+      rating: rating,
+      body: bodyCtrl.text.trim(),
+      date: DateTime.now().toIso8601String().substring(0, 10),
+    ));
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Review submitted — thanks for your feedback.')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final lh = state.findUser(widget.leaseholderId);
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(color: HomiesColors.accentSoft, borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.rate_review_outlined, size: 22, color: HomiesColors.accent),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Leave a review', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                if (lh != null)
+                  Text('About ${lh.name}', style: const TextStyle(fontSize: 12, color: HomiesColors.textDim)),
+              ]),
+            ),
+          ]),
+          const SizedBox(height: 6),
+          const Text(
+            'Your honest experience helps other tenants make informed decisions.',
+            style: TextStyle(fontSize: 13, color: HomiesColors.textDim, height: 1.4),
+          ),
+          const SizedBox(height: 20),
+
+          const FieldLabel('Overall rating'),
+          const SizedBox(height: 6),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            for (var i = 1; i <= 5; i++)
+              GestureDetector(
+                onTap: () => setState(() => rating = i),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Icon(
+                    i <= rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                    size: 36,
+                    color: i <= rating ? const Color(0xFFF6AD55) : HomiesColors.border,
+                  ),
+                ),
+              ),
+          ]),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                const ['', 'Poor', 'Below average', 'Average', 'Good', 'Excellent'][rating],
+                style: const TextStyle(fontSize: 12, color: HomiesColors.textDim),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          FieldLabel('Your experience${bodyCtrl.text.length < 10 ? " (min 10 chars)" : ""}'),
+          TextField(
+            controller: bodyCtrl,
+            maxLines: 4,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              hintText: 'How was communication, maintenance response, respect of privacy, fairness…',
+              alignLabelWithHint: true,
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          InkWell(
+            onTap: () => setState(() => anonymous = !anonymous),
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: anonymous ? HomiesColors.accentSoft : HomiesColors.surface2,
+                border: Border.all(color: anonymous ? HomiesColors.accentBorder : HomiesColors.border),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(children: [
+                Icon(
+                  anonymous ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  size: 18,
+                  color: anonymous ? HomiesColors.accent : HomiesColors.textDim,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    anonymous ? 'Posting anonymously' : 'Post with your name',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: anonymous ? HomiesColors.accentStrong : HomiesColors.text,
+                      fontWeight: anonymous ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  ),
+                ),
+                Switch(value: anonymous, onChanged: (v) => setState(() => anonymous = v)),
+              ]),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            const SizedBox(width: 10),
+            ElevatedButton(
+              onPressed: _canSubmit ? _submit : null,
+              child: const Text('Submit review'),
+            ),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
+// ─── Leaseholder report banner (marketplace — tenant view) ────────────────────
+
+const _lhCategories = <(String, String)>[
+  ('maintenance',    '🔧 Maintenance neglect'),
+  ('harassment',     '⚠️ Harassment or intimidation'),
+  ('bond',           '💰 Bond / deposit dispute'),
+  ('entry',          '🚪 Unauthorized entry'),
+  ('privacy',        '🔒 Privacy violation'),
+  ('lease_breach',   '📄 Lease breach'),
+  ('noise',          '🔊 Excessive noise'),
+  ('discrimination', '⛔ Discrimination'),
+  ('other',          '📌 Other'),
+];
+
+const _lhSeverityLabels = ['', 'Low', 'Moderate', 'Serious', 'Severe', 'Critical'];
+
+String _lhCategoryLabel(String? cat) =>
+    _lhCategories.firstWhere((e) => e.$1 == cat, orElse: () => ('', cat ?? '—')).$2;
+
+class _LeaseholderReportBanner extends StatelessWidget {
+  final User cu;
+  const _LeaseholderReportBanner({required this.cu});
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final lh = state.leaseholders.firstOrNull;
+    final allLhComplaints = state.complaints
+        .where((c) => c.kind == 'leaseholder')
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    final myComplaints = allLhComplaints.where((c) => c.from == cu.id).toList();
+
+    return HomiesCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: HomiesColors.dangerSoft, borderRadius: BorderRadius.circular(10)),
+            child: const Icon(Icons.report_outlined, size: 22, color: HomiesColors.danger),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Leaseholder complaints', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              Text(
+                lh != null ? 'Against ${lh.name}' : 'About your current leaseholder',
+                style: const TextStyle(fontSize: 12, color: HomiesColors.textDim),
+              ),
+            ]),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              builder: (_) => Padding(
+                padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+                child: const _LhComplaintModal(),
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: HomiesColors.danger,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            ),
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('Report'),
+          ),
+        ]),
+        const SizedBox(height: 12),
+
+        if (allLhComplaints.isNotEmpty) ...[
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            HomiesChip('${allLhComplaints.length} report${allLhComplaints.length == 1 ? '' : 's'} total'),
+            HomiesChip('${allLhComplaints.where((c) => c.status == 'open').length} open', tone: ChipTone.warn),
+            HomiesChip('${myComplaints.length} filed by you', tone: ChipTone.neutral),
+          ]),
+          const SizedBox(height: 12),
+          const Divider(),
+          const SizedBox(height: 8),
+          const Text('RECENT REPORTS',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: HomiesColors.textFaint, letterSpacing: 0.7)),
+          const SizedBox(height: 8),
+          for (final c in allLhComplaints.take(3))
+            _LhReportTile(complaint: c, isOwn: c.from == cu.id),
+          if (allLhComplaints.length > 3)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '+ ${allLhComplaints.length - 3} more — view in Complaints',
+                style: const TextStyle(fontSize: 12, color: HomiesColors.textDim),
+              ),
+            ),
+        ] else
+          const Text(
+            'No reports yet. If you experience maintenance neglect, harassment, bond disputes or lease breaches — file a formal report here.',
+            style: TextStyle(fontSize: 12, color: HomiesColors.textDim, height: 1.4),
+          ),
+      ]),
+    );
+  }
+}
+
+class _LhReportTile extends StatelessWidget {
+  final Complaint complaint;
+  final bool isOwn;
+  const _LhReportTile({required this.complaint, required this.isOwn});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = complaint;
+    final sev = c.severity.clamp(1, 5);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isOwn ? HomiesColors.accentSoft : HomiesColors.surface2,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isOwn ? HomiesColors.accentBorder : HomiesColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(
+            child: Wrap(spacing: 6, runSpacing: 4, children: [
+              if (c.category != null) HomiesChip(_lhCategoryLabel(c.category)),
+              HomiesChip(
+                '${_lhSeverityLabels[sev]} · $sev/5',
+                tone: sev >= 4 ? ChipTone.danger : sev == 3 ? ChipTone.warn : ChipTone.neutral,
+              ),
+              HomiesChip(
+                c.status,
+                tone: c.status == 'open' ? ChipTone.warn : c.status == 'actioned' ? ChipTone.ok : ChipTone.neutral,
+              ),
+            ]),
+          ),
+          Text(fmtDate(c.date), style: const TextStyle(fontSize: 11, color: HomiesColors.textFaint)),
+        ]),
+        const SizedBox(height: 6),
+        Text(
+          c.anonymous ? '(Anonymous) ${c.reason}' : c.reason,
+          style: const TextStyle(fontSize: 12, height: 1.4),
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (isOwn)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text('Filed by you',
+                style: TextStyle(fontSize: 11, color: HomiesColors.accent, fontWeight: FontWeight.w500)),
+          ),
+      ]),
+    );
+  }
+}
+
+// ─── Leaseholder complaint modal ──────────────────────────────────────────────
+
+class _LhComplaintModal extends StatefulWidget {
+  const _LhComplaintModal();
+
+  @override
+  State<_LhComplaintModal> createState() => _LhComplaintModalState();
+}
+
+class _LhComplaintModalState extends State<_LhComplaintModal> {
+  late HomiesState state;
+  String? category;
+  int severity = 2;
+  String? incidentDate;
+  final descCtrl = TextEditingController();
+  Attachment? evidence;
+  bool anonymous = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    state = HomiesScope.of(context);
+    category ??= _lhCategories.first.$1;
+  }
+
+  @override
+  void dispose() {
+    descCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _canSubmit => descCtrl.text.trim().length >= 10 && category != null;
+
+  void _submit() {
+    final cu = state.currentUser!;
+    final lh = state.leaseholders.firstOrNull;
+    if (lh == null) return;
+    final now = DateTime.now();
+    state.mutate(() => state.complaints.insert(
+          0,
+          Complaint(
+            id: 'lhc-${Random().nextInt(0xFFFFFF).toRadixString(36)}',
+            against: lh.id,
+            from: cu.id,
+            reason: descCtrl.text.trim(),
+            severity: severity,
+            date: now.toIso8601String().substring(0, 10),
+            kind: 'leaseholder',
+            category: category,
+            incidentDate: incidentDate,
+            anonymous: anonymous,
+            evidence: evidence,
+          ),
+        ));
+    state.addAppNotification(AppNotification(
+      id: 'lhc_${now.millisecondsSinceEpoch}_${lh.id}',
+      kind: 'complaint',
+      title: 'New leaseholder complaint received',
+      body: '${anonymous ? 'A tenant' : cu.name} filed a report: ${_lhCategoryLabel(category)}.',
+      at: now.toIso8601String(),
+      forUserId: lh.id,
+    ));
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Report submitted. The leaseholder has been notified.')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lh = state.leaseholders.firstOrNull;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.92),
+          child: SingleChildScrollView(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+              Row(children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(color: HomiesColors.dangerSoft, borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.report_outlined, size: 22, color: HomiesColors.danger),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('Report a leaseholder issue', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                    if (lh != null)
+                      Text('Against ${lh.name}', style: const TextStyle(fontSize: 12, color: HomiesColors.textDim)),
+                  ]),
+                ),
+              ]),
+              const SizedBox(height: 6),
+              const Text(
+                'This is a formal record. Be factual and specific — vague reports are harder to action.',
+                style: TextStyle(fontSize: 13, color: HomiesColors.textDim, height: 1.4),
+              ),
+              const SizedBox(height: 20),
+
+              const FieldLabel('Type of issue'),
+              DropdownButtonFormField<String>(
+                initialValue: category,
+                items: [
+                  for (final c in _lhCategories)
+                    DropdownMenuItem(value: c.$1, child: Text(c.$2, style: const TextStyle(fontSize: 13))),
+                ],
+                onChanged: (v) => setState(() => category = v),
+              ),
+              const SizedBox(height: 16),
+
+              const FieldLabel('Severity'),
+              const SizedBox(height: 6),
+              Row(children: [
+                for (var i = 1; i <= 5; i++)
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => severity = i),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 120),
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: severity == i
+                              ? (i >= 4 ? HomiesColors.danger : i == 3 ? HomiesColors.warn : HomiesColors.accent)
+                              : HomiesColors.surface2,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: severity == i
+                                ? (i >= 4 ? HomiesColors.dangerBorder : i == 3 ? HomiesColors.warnBorder : HomiesColors.accentBorder)
+                                : HomiesColors.border,
+                          ),
+                        ),
+                        child: Column(children: [
+                          Text(
+                            '$i',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: severity == i ? Colors.white : HomiesColors.textDim,
+                            ),
+                          ),
+                          Text(
+                            _lhSeverityLabels[i],
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: severity == i ? Colors.white.withValues(alpha: 0.85) : HomiesColors.textFaint,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ]),
+                      ),
+                    ),
+                  ),
+              ]),
+              const SizedBox(height: 16),
+
+              const FieldLabel('Date of incident'),
+              InkWell(
+                onTap: () async {
+                  final d = await pickDate(context, initial: parseIso(incidentDate));
+                  if (d != null) setState(() => incidentDate = toIso(d));
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(),
+                  child: Text(
+                    incidentDate != null ? fmtDate(incidentDate) : 'When did this happen?',
+                    style: TextStyle(color: incidentDate != null ? HomiesColors.text : HomiesColors.textFaint),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              FieldLabel('What happened?${descCtrl.text.length < 10 ? " (min 10 chars)" : ""}'),
+              TextField(
+                controller: descCtrl,
+                maxLines: 5,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  hintText: 'Be specific — when, where, what exactly happened. Include any witnesses or prior attempts to resolve.',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              const FieldLabel('Evidence (optional)'),
+              FilePickerButton(
+                value: evidence,
+                label: 'Attach photo, video or document',
+                onChanged: (f) => setState(() => evidence = f),
+              ),
+              const Hint('Photos, PDFs, screenshots — anything that supports your report.'),
+              const SizedBox(height: 16),
+
+              InkWell(
+                onTap: () => setState(() => anonymous = !anonymous),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: anonymous ? HomiesColors.accentSoft : HomiesColors.surface2,
+                    border: Border.all(color: anonymous ? HomiesColors.accentBorder : HomiesColors.border),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(children: [
+                    Icon(
+                      anonymous ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                      size: 20,
+                      color: anonymous ? HomiesColors.accent : HomiesColors.textDim,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(
+                          'File anonymously',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: anonymous ? HomiesColors.accentStrong : HomiesColors.text,
+                          ),
+                        ),
+                        Text(
+                          anonymous
+                              ? 'Your name is hidden from the leaseholder.'
+                              : 'Your name will be visible to the leaseholder.',
+                          style: const TextStyle(fontSize: 11, color: HomiesColors.textDim),
+                        ),
+                      ]),
+                    ),
+                    Switch(value: anonymous, onChanged: (v) => setState(() => anonymous = v)),
+                  ]),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                const SizedBox(width: 10),
+                ElevatedButton(
+                  onPressed: _canSubmit ? _submit : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: HomiesColors.danger,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Submit report'),
+                ),
+              ]),
+            ]),
+          ),
+        ),
+      ),
     );
   }
 }

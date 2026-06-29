@@ -21,7 +21,7 @@ class SubscriptionsScreen extends StatelessWidget {
 
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           PageHead(
             title: 'Subscriptions',
@@ -102,7 +102,7 @@ class SubscriptionsScreen extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       builder: (_) => Padding(
-        padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+        padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 24),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const Text('Attach receipt', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
           const SizedBox(height: 10),

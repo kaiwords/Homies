@@ -254,9 +254,9 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble> {
   @override
   Widget build(BuildContext context) {
     final mine = widget.mine;
-    final fg = mine ? Colors.white : HomiesColors.text;
-    final track = mine ? Colors.white38 : HomiesColors.border;
-    final fill = mine ? Colors.white : HomiesColors.accent;
+    final fg = mine ? const Color(0xFF1E2A3A) : HomiesColors.text;
+    final track = mine ? const Color(0xFF1E2A3A).withValues(alpha: 0.22) : HomiesColors.border;
+    final fill = mine ? const Color(0xFF1E2A3A).withValues(alpha: 0.7) : HomiesColors.accent;
     final total = _total.inMilliseconds == 0 ? (widget.media.durationMs ?? 1) : _total.inMilliseconds;
     final progress = total == 0 ? 0.0 : (_position.inMilliseconds / total).clamp(0.0, 1.0);
     final remaining = _playing || _position > Duration.zero
@@ -272,7 +272,7 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble> {
           child: Container(
             width: 38,
             height: 38,
-            decoration: BoxDecoration(color: mine ? Colors.white24 : HomiesColors.accentSoft, shape: BoxShape.circle),
+            decoration: BoxDecoration(color: mine ? const Color(0xFF1E2A3A).withValues(alpha: 0.10) : HomiesColors.accentSoft, shape: BoxShape.circle),
             child: Icon(_playing ? Icons.pause : Icons.play_arrow, color: fg, size: 22),
           ),
         ),

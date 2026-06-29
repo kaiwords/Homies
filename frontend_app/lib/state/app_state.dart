@@ -53,6 +53,12 @@ class HomiesState extends ChangeNotifier {
   WelcomeGuide welcomeGuide = SeedData.welcomeGuide();
   NotificationPrefs notifPrefs = NotificationPrefs();
   List<CalendarNote> calendarNotes = [];
+  List<AppNotification> appNotifications = [];
+  List<LeaseholderReview> lhReviews = [];
+  HouseTerms houseTerms = HouseTerms();
+  List<ConditionCheck> conditionChecks = [];
+  List<ApplianceBooking> applianceBookings = [];
+  List<ParkingBooking> parkingBookings = [];
 
   StreamSubscription<fb.User?>? _authSub;
 
@@ -70,7 +76,11 @@ class HomiesState extends ChangeNotifier {
         final j = jsonDecode(raw) as Map<String, dynamic>;
         session = Session.fromJson((j['session'] as Map<String, dynamic>?) ?? {});
         property = j['property'] != null ? Property.fromJson(j['property'] as Map<String, dynamic>) : property;
-        users = ((j['users'] as List?) ?? []).map((e) => User.fromJson(e as Map<String, dynamic>)).toList();
+        final rawUsers = ((j['users'] as List?) ?? []).map((e) => User.fromJson(e as Map<String, dynamic>)).toList();
+        // Deduplicate by id — last entry wins (most recently written is most up-to-date).
+        final userMap = <String, User>{};
+        for (final u in rawUsers) { userMap[u.id] = u; }
+        users = userMap.values.toList();
         invites = ((j['invites'] as List?) ?? []).map((e) => Invite.fromJson(e as Map<String, dynamic>)).toList();
         houseRules = ((j['houseRules'] as List?) ?? []).map((e) => HouseRule.fromJson(e as Map<String, dynamic>)).toList();
         bills = ((j['bills'] as List?) ?? []).map((e) => Bill.fromJson(e as Map<String, dynamic>)).toList();
@@ -106,6 +116,12 @@ class HomiesState extends ChangeNotifier {
         if (j['welcomeGuide'] != null) welcomeGuide = WelcomeGuide.fromJson(j['welcomeGuide'] as Map<String, dynamic>);
         if (j['notifPrefs'] != null) notifPrefs = NotificationPrefs.fromJson(j['notifPrefs'] as Map<String, dynamic>);
         calendarNotes = ((j['calendarNotes'] as List?) ?? []).map((e) => CalendarNote.fromJson(e as Map<String, dynamic>)).toList();
+        appNotifications = ((j['appNotifications'] as List?) ?? []).map((e) => AppNotification.fromJson(e as Map<String, dynamic>)).toList();
+        lhReviews = ((j['lhReviews'] as List?) ?? []).map((e) => LeaseholderReview.fromJson(e as Map<String, dynamic>)).toList();
+        if (j['houseTerms'] != null) houseTerms = HouseTerms.fromJson(j['houseTerms'] as Map<String, dynamic>);
+        conditionChecks = ((j['conditionChecks'] as List?) ?? []).map((e) => ConditionCheck.fromJson(e as Map<String, dynamic>)).toList();
+        applianceBookings = ((j['applianceBookings'] as List?) ?? []).map((e) => ApplianceBooking.fromJson(e as Map<String, dynamic>)).toList();
+        parkingBookings = ((j['parkingBookings'] as List?) ?? []).map((e) => ParkingBooking.fromJson(e as Map<String, dynamic>)).toList();
         notifyListeners();
       } catch (e) {
         if (kDebugMode) {
@@ -220,16 +236,18 @@ class HomiesState extends ChangeNotifier {
         'createdAt': FieldValue.serverTimestamp(),
       });
       mutate(() {
-        users.add(User(
-          id: uid,
-          name: displayName,
-          initials: initials,
-          role: role,
-          email: email.trim(),
-          phone: phone.trim(),
-          pending: true,
-          member: member,
-        ));
+        if (users.firstWhereOrNull((u) => u.id == uid) == null) {
+          users.add(User(
+            id: uid,
+            name: displayName,
+            initials: initials,
+            role: role,
+            email: email.trim(),
+            phone: phone.trim(),
+            pending: true,
+            member: member,
+          ));
+        }
         session = Session(userId: uid, pendingSignup: {'role': role});
       });
       return const AuthResult.success();
@@ -327,6 +345,12 @@ class HomiesState extends ChangeNotifier {
       'welcomeGuide': welcomeGuide.toJson(),
       'notifPrefs': notifPrefs.toJson(),
       'calendarNotes': calendarNotes.map((n) => n.toJson()).toList(),
+      'appNotifications': appNotifications.map((n) => n.toJson()).toList(),
+      'lhReviews': lhReviews.map((r) => r.toJson()).toList(),
+      'houseTerms': houseTerms.toJson(),
+      'conditionChecks': conditionChecks.map((c) => c.toJson()).toList(),
+      'applianceBookings': applianceBookings.map((b) => b.toJson()).toList(),
+      'parkingBookings': parkingBookings.map((b) => b.toJson()).toList(),
     };
     await prefs.setString(_storageKey, jsonEncode(j));
   }
@@ -369,8 +393,135 @@ class HomiesState extends ChangeNotifier {
     shoppingList = SeedData.shoppingList();
     welcomeGuide = SeedData.welcomeGuide();
     notifPrefs = NotificationPrefs();
+    appNotifications = [];
+    houseTerms = HouseTerms();
     notifyListeners();
     _persist();
+  }
+
+  void addAppNotification(AppNotification n) {
+    mutate(() => appNotifications.insert(0, n));
+  }
+
+  void addLhReview(LeaseholderReview r) {
+    mutate(() => lhReviews.insert(0, r));
+  }
+
+  // Generate contextual in-app notifications from live state (deduped by stable ID).
+  void seedContextualNotifs() {
+    final uid = session.userId;
+    if (uid == null || uid.isEmpty) return;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final existingIds = appNotifications.map((n) => n.id).toSet();
+    final toAdd = <AppNotification>[];
+
+    void maybeAdd(AppNotification n) {
+      if (!existingIds.contains(n.id)) toAdd.add(n);
+    }
+
+    // ── Rent due ──────────────────────────────────────────────────────────────
+    final rentStart = property.rentStartDate;
+    if (rentStart != null && rentStart.isNotEmpty) {
+      var current = rentStart;
+      var guard = 0;
+      while (guard++ < 5000) {
+        final next = addCadence(current, property.rentCadence, null);
+        if (next == null) break;
+        final nd = parseIso(next);
+        if (nd == null) break;
+        if (!DateTime(nd.year, nd.month, nd.day).isAfter(today)) {
+          current = next;
+        } else {
+          break;
+        }
+      }
+      final periodDate = parseIso(current);
+      if (periodDate != null) {
+        final daysAgo = today.difference(DateTime(periodDate.year, periodDate.month, periodDate.day)).inDays;
+        if (daysAgo >= 0 && daysAgo <= 5) {
+          final alreadyPaid = rentPayments.any((p) => p.userId == uid && p.periodStart == current);
+          if (!alreadyPaid) {
+            final perPerson = activeHousemates.isEmpty ? property.rentAmount : property.rentAmount / activeHousemates.length;
+            maybeAdd(AppNotification(
+              id: 'rent_due_${current}_$uid',
+              kind: 'rent_due',
+              title: daysAgo == 0 ? 'Rent is due today' : 'Rent was due $daysAgo day${daysAgo == 1 ? '' : 's'} ago',
+              body: 'Your share is ${fmtAUD(perPerson)} for this period. Mark it paid in Finance.',
+              at: parseIso(current)!.toIso8601String(),
+              forUserId: uid,
+            ));
+          }
+        }
+      }
+    }
+
+    // ── Bills due within 4 days ───────────────────────────────────────────────
+    for (final b in bills.where((b) => b.status != 'settled' && (b.shares[uid] != null))) {
+      if (b.paidBy[uid] == true) continue;
+      final due = parseIso(b.dueDate);
+      if (due == null) continue;
+      final dueDay = DateTime(due.year, due.month, due.day);
+      final diff = dueDay.difference(today).inDays;
+      if (diff >= -2 && diff <= 4) {
+        final label = diff < 0 ? 'overdue ${diff.abs()} day${diff.abs() == 1 ? '' : 's'}' : diff == 0 ? 'due today' : 'due in $diff day${diff == 1 ? '' : 's'}';
+        maybeAdd(AppNotification(
+          id: 'bill_due_${b.id}_$uid',
+          kind: 'bill_due',
+          title: 'Bill ${diff < 0 ? 'overdue' : 'due soon'}: ${b.title}',
+          body: 'Your share is ${fmtAUD(b.shares[uid]!)} — $label.',
+          at: due.toIso8601String(),
+          forUserId: uid,
+        ));
+      }
+    }
+
+    // ── Overdue chores ────────────────────────────────────────────────────────
+    for (final t in cleaningTasks.where((t) => t.assignee == uid && !t.done && (t.excuse?.isEmpty ?? true))) {
+      final due = parseIso(t.dueDate);
+      if (due == null) continue;
+      final dueDay = DateTime(due.year, due.month, due.day);
+      if (dueDay.isBefore(today)) {
+        maybeAdd(AppNotification(
+          id: 'chore_due_${t.id}_$uid',
+          kind: 'chore_due',
+          title: 'Overdue chore: ${t.task}',
+          body: 'This was due ${fmtRelative(t.dueDate)}. Tick it done or log an excuse in Cleaning.',
+          at: due.toIso8601String(),
+          forUserId: uid,
+        ));
+      }
+    }
+
+    // ── Pending swap requests ─────────────────────────────────────────────────
+    for (final r in choreSwaps.where((r) => r.status == 'pending' && r.fromUserId != uid && (r.toUserId == null || r.toUserId == uid))) {
+      final task = cleaningTasks.firstWhereOrNull((t) => t.id == r.taskId);
+      maybeAdd(AppNotification(
+        id: 'swap_${r.id}_$uid',
+        kind: 'swap_request',
+        title: '${r.fromUserName} wants to swap a chore',
+        body: 'They want to hand off "${task?.task ?? 'a cleaning task'}" — respond in Cleaning.',
+        at: r.requestedAt,
+        forUserId: uid,
+      ));
+    }
+
+    if (toAdd.isNotEmpty) {
+      mutate(() => appNotifications.insertAll(0, toAdd));
+    }
+  }
+
+  void markNotificationsRead() {
+    mutate(() {
+      for (final n in appNotifications) {
+        n.isRead = true;
+      }
+    });
+  }
+
+  void clearAppNotifications() {
+    mutate(() => appNotifications.clear());
   }
 
   void signIn(String userId) {

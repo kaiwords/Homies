@@ -39,7 +39,7 @@ class _LeavingScreenState extends State<LeavingScreen> {
 
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const PageHead(title: 'Leaving the house', subtitle: "Give 2 weeks' notice. Bond returns after inspection."),
           if (myNotice == null)

@@ -13,13 +13,6 @@ class AdminShell extends StatelessWidget {
   final String currentLocation;
   const AdminShell({super.key, required this.child, required this.currentLocation});
 
-  static const _tabs = ['/admin', '/admin/users'];
-
-  int get _index {
-    if (currentLocation.startsWith('/admin/users')) return 1;
-    return 0;
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = HomiesScope.of(context);
@@ -27,7 +20,6 @@ class AdminShell extends StatelessWidget {
     if (user == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    final pending = state.pendingLeaseVerifications.length;
 
     return Scaffold(
       appBar: AppBar(
@@ -65,41 +57,7 @@ class AdminShell extends StatelessWidget {
         ],
       ),
       body: child,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _index,
-        onTap: (i) => context.go(_tabs[i]),
-        items: [
-          BottomNavigationBarItem(
-            icon: _BadgeIcon(icon: Icons.verified_outlined, count: pending),
-            activeIcon: _BadgeIcon(icon: Icons.verified, count: pending),
-            label: 'Verifications',
-          ),
-          const BottomNavigationBarItem(icon: Icon(Icons.group_outlined), activeIcon: Icon(Icons.group), label: 'Users'),
-        ],
-      ),
     );
   }
 }
 
-class _BadgeIcon extends StatelessWidget {
-  final IconData icon;
-  final int count;
-  const _BadgeIcon({required this.icon, required this.count});
-
-  @override
-  Widget build(BuildContext context) {
-    if (count == 0) return Icon(icon);
-    return Stack(clipBehavior: Clip.none, children: [
-      Icon(icon),
-      Positioned(
-        right: -6,
-        top: -4,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-          decoration: BoxDecoration(color: HomiesColors.accent, borderRadius: BorderRadius.circular(20)),
-          child: Text('$count', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
-        ),
-      ),
-    ]);
-  }
-}

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
+import '../services/notification_service.dart';
 import '../state/app_state.dart';
 import '../state/models.dart';
 import '../theme.dart';
 import '../util/format.dart';
 import '../widgets/avatar.dart';
+import '../widgets/file_picker_button.dart';
 import '../widgets/ui_kit.dart';
 
 IconData _billCategoryIcon(String category) {
@@ -48,11 +51,16 @@ class FinanceScreen extends StatelessWidget {
 
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const PageHead(
+          PageHead(
             title: 'Finance',
             subtitle: 'All shared expenses — rent, bills, subscriptions, groceries and necessities.',
+            action: OutlinedButton.icon(
+              onPressed: () => context.go('/app/my-spending'),
+              icon: const Icon(Icons.bar_chart_outlined, size: 16),
+              label: const Text('My spending'),
+            ),
           ),
 
           _RentSummaryCard(perPersonRent: perPersonRent),
@@ -72,7 +80,9 @@ class FinanceScreen extends StatelessWidget {
                 onTap: () => _showSheet(
                   context,
                   title: b.title,
-                  subtitle: 'Due ${fmtDate(b.dueDate)} · ${fmtAUD(b.amount)} total',
+                  subtitle: '${fmtAUD(b.amount)} total',
+                  dueDate: b.dueDate,
+                  onUpdateDueDate: (d) => state.mutate(() => b.dueDate = d),
                   participants: b.shares.keys.toList(),
                   shares: b.shares,
                   paidBy: b.paidBy,
@@ -233,6 +243,8 @@ class FinanceScreen extends StatelessWidget {
     BuildContext context, {
     required String title,
     required String subtitle,
+    String? dueDate,
+    void Function(String)? onUpdateDueDate,
     required List<String> participants,
     required Map<String, double> shares,
     required Map<String, bool> paidBy,
@@ -249,6 +261,8 @@ class FinanceScreen extends StatelessWidget {
       builder: (_) => _PaymentSheet(
         title: title,
         subtitle: subtitle,
+        dueDate: dueDate,
+        onUpdateDueDate: onUpdateDueDate,
         participants: participants,
         shares: shares,
         paidBy: paidBy,
@@ -336,12 +350,18 @@ class _RentSummaryCardState extends State<_RentSummaryCard> {
               ),
             ]),
           ),
-          if (isLeaseholder)
+          if (isLeaseholder) ...[
+            IconButton(
+              icon: const Icon(Icons.calendar_today_outlined, size: 18, color: HomiesColors.textDim),
+              tooltip: 'Set rent schedule',
+              onPressed: () => _openScheduleEditor(context, state),
+            ),
             IconButton(
               icon: const Icon(Icons.edit_outlined, size: 18, color: HomiesColors.textDim),
               tooltip: 'Edit rent shares',
               onPressed: () => _openShareEditor(context, state),
             ),
+          ],
         ]),
         const SizedBox(height: 8),
         const Divider(height: 1),
@@ -373,8 +393,19 @@ class _RentSummaryCardState extends State<_RentSummaryCard> {
                   ),
                 ),
                 const SizedBox(width: 4),
-              ] else
-                const Expanded(child: Text('No rent period set', style: TextStyle(fontSize: 12, color: HomiesColors.textFaint))),
+              ] else ...[
+                Expanded(child: Text('No rent period set', style: TextStyle(fontSize: 12, color: HomiesColors.textFaint))),
+                if (isLeaseholder)
+                  TextButton(
+                    onPressed: () => _openScheduleEditor(context, state),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('Set up', style: TextStyle(fontSize: 12)),
+                  ),
+              ],
               AnimatedRotation(
                 turns: _expanded ? 0.5 : 0,
                 duration: const Duration(milliseconds: 200),
@@ -386,20 +417,21 @@ class _RentSummaryCardState extends State<_RentSummaryCard> {
 
         // Collapsible: per-person rows + notes + history
         if (_expanded) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
 
           for (final u in active)
             _RentPayRow(
               user: u,
               amount: _amountFor(state, u, equalAmount),
               features: _featuresFor(state, u),
+              reason: _reasonFor(state, u),
               payment: periodPayments.firstWhereOrNull((p) => p.userId == u.id),
               isYou: u.id == cu.id,
               canMark: isLeaseholder || u.id == cu.id,
               cu: cu,
               onMarkPaid: periodStart == null
                   ? null
-                  : () => state.mutate(() {
+                  : (proof) => state.mutate(() {
                         state.rentPayments.add(RentPayment(
                           id: 'rp_${DateTime.now().millisecondsSinceEpoch}',
                           userId: u.id,
@@ -408,6 +440,7 @@ class _RentSummaryCardState extends State<_RentSummaryCard> {
                           paidAt: DateTime.now().toIso8601String(),
                           periodStart: periodStart,
                           confirmedBy: cu.id != u.id ? cu.name : null,
+                          proof: proof,
                         ));
                       }),
               onUndo: periodStart == null
@@ -511,6 +544,11 @@ class _RentSummaryCardState extends State<_RentSummaryCard> {
     return rs?.amount ?? equalAmount;
   }
 
+  String? _reasonFor(HomiesState state, User u) {
+    final rs = state.rentShares.firstWhereOrNull((s) => s.userId == u.id);
+    return rs?.reason?.isNotEmpty == true ? rs!.reason : null;
+  }
+
   List<String> _featuresFor(HomiesState state, User u) {
     final rs = state.rentShares.firstWhereOrNull((s) => s.userId == u.id);
     if (rs == null) return [];
@@ -529,6 +567,14 @@ class _RentSummaryCardState extends State<_RentSummaryCard> {
     );
   }
 
+  void _openScheduleEditor(BuildContext context, HomiesState state) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _RentScheduleSheet(state: state),
+    );
+  }
+
   void _openShareEditor(BuildContext context, HomiesState state) {
     showModalBottomSheet(
       context: context,
@@ -544,17 +590,19 @@ class _RentPayRow extends StatelessWidget {
   final User user;
   final double amount;
   final List<String> features;
+  final String? reason;
   final RentPayment? payment;
   final bool isYou;
   final bool canMark;
   final User cu;
-  final VoidCallback? onMarkPaid;
+  final void Function(Attachment? proof)? onMarkPaid;
   final VoidCallback? onUndo;
 
   const _RentPayRow({
     required this.user,
     required this.amount,
     required this.features,
+    this.reason,
     this.payment,
     required this.isYou,
     required this.canMark,
@@ -587,7 +635,9 @@ class _RentPayRow extends StatelessWidget {
               Wrap(spacing: 4, children: [
                 for (final f in features) HomiesChip(f, tone: ChipTone.accent),
               ]),
-            if (_isPaid && payment != null)
+            if (reason != null)
+              Text(reason!, style: const TextStyle(fontSize: 11, color: HomiesColors.textDim, height: 1.3)),
+            if (_isPaid && payment != null) ...[
               Row(children: [
                 const Icon(Icons.lock_outline, size: 11, color: HomiesColors.ok),
                 const SizedBox(width: 3),
@@ -599,6 +649,12 @@ class _RentPayRow extends StatelessWidget {
                   ),
                 ),
               ]),
+              if (payment!.proof != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: AttachmentTile(value: payment!.proof!, compact: true),
+                ),
+            ],
           ]),
         ),
         Text(fmtAUD(amount),
@@ -636,20 +692,15 @@ class _RentPayRow extends StatelessWidget {
   }
 
   Future<void> _confirmMark(BuildContext context) async {
-    final ok = await showDialog<bool>(
+    await showModalBottomSheet(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Save rent payment'),
-        content: Text(
-          'Mark ${isYou ? 'your' : "${user.name}'s"} rent share of ${fmtAUD(amount)} as paid?',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm')),
-        ],
+      isScrollControlled: true,
+      builder: (_) => _RentMarkPaidSheet(
+        label: isYou ? 'your' : "${user.name}'s",
+        amount: amount,
+        onConfirm: (proof) => onMarkPaid?.call(proof),
       ),
     );
-    if (ok == true) onMarkPaid?.call();
   }
 
   Future<void> _confirmUndo(BuildContext context) async {
@@ -667,6 +718,81 @@ class _RentPayRow extends StatelessWidget {
       ),
     );
     if (ok == true) onUndo?.call();
+  }
+}
+
+// ─── Rent mark-paid sheet ─────────────────────────────────────────────────────
+
+class _RentMarkPaidSheet extends StatefulWidget {
+  final String label;
+  final double amount;
+  final void Function(Attachment? proof) onConfirm;
+  const _RentMarkPaidSheet({required this.label, required this.amount, required this.onConfirm});
+
+  @override
+  State<_RentMarkPaidSheet> createState() => _RentMarkPaidSheetState();
+}
+
+class _RentMarkPaidSheetState extends State<_RentMarkPaidSheet> {
+  Attachment? _proof;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 28),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(
+          'Mark ${widget.label} rent paid',
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          fmtAUD(widget.amount),
+          style: const TextStyle(fontSize: 15, color: HomiesColors.textDim),
+        ),
+        const SizedBox(height: 20),
+        const Text('Attach transfer proof (optional)',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        FilePickerButton(
+          value: _proof,
+          onChanged: (f) => setState(() => _proof = f),
+          allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+          label: _proof == null ? 'Upload screenshot or receipt' : 'Replace file',
+        ),
+        if (_proof != null) ...[
+          const SizedBox(height: 6),
+          TextButton(
+            onPressed: () => setState(() => _proof = null),
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text('Remove proof', style: TextStyle(color: HomiesColors.danger, fontSize: 12)),
+          ),
+        ],
+        const SizedBox(height: 20),
+        Row(children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                widget.onConfirm(_proof);
+              },
+              child: const Text('Confirm paid'),
+            ),
+          ),
+        ]),
+      ]),
+    );
   }
 }
 
@@ -693,7 +819,7 @@ class _RentHistorySheet extends StatelessWidget {
       maxChildSize: 0.92,
       expand: false,
       builder: (_, ctrl) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
         child: ListView(controller: ctrl, children: [
           Center(
             child: Container(
@@ -884,9 +1010,11 @@ class _FinanceRow extends StatelessWidget {
   }
 }
 
-class _PaymentSheet extends StatelessWidget {
+class _PaymentSheet extends StatefulWidget {
   final String title;
   final String subtitle;
+  final String? dueDate;
+  final void Function(String)? onUpdateDueDate;
   final List<String> participants;
   final Map<String, double> shares;
   final Map<String, bool> paidBy;
@@ -900,6 +1028,8 @@ class _PaymentSheet extends StatelessWidget {
   const _PaymentSheet({
     required this.title,
     required this.subtitle,
+    this.dueDate,
+    this.onUpdateDueDate,
     required this.participants,
     required this.shares,
     required this.paidBy,
@@ -912,14 +1042,38 @@ class _PaymentSheet extends StatelessWidget {
   });
 
   @override
+  State<_PaymentSheet> createState() => _PaymentSheetState();
+}
+
+class _PaymentSheetState extends State<_PaymentSheet> {
+  late String? _dueDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _dueDate = widget.dueDate;
+  }
+
+  Future<void> _pickDueDate() async {
+    final picked = await pickDate(context, initial: parseIso(_dueDate));
+    if (picked == null) return;
+    final iso = toIso(picked)!;
+    setState(() => _dueDate = iso);
+    widget.onUpdateDueDate!(iso);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final isPayer = widget.cu.id == widget.payer;
+    final canEditDate = isPayer && widget.onUpdateDueDate != null;
+
     return DraggableScrollableSheet(
       initialChildSize: 0.6,
       minChildSize: 0.4,
       maxChildSize: 0.9,
       expand: false,
       builder: (_, ctrl) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
         child: ListView(controller: ctrl, children: [
           Center(
             child: Container(
@@ -929,22 +1083,41 @@ class _PaymentSheet extends StatelessWidget {
               decoration: BoxDecoration(color: HomiesColors.textFaint, borderRadius: BorderRadius.circular(2)),
             ),
           ),
-          Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-          Text(subtitle, style: const TextStyle(color: HomiesColors.textDim, fontSize: 13)),
+          Text(widget.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          Text(widget.subtitle, style: const TextStyle(color: HomiesColors.textDim, fontSize: 13)),
+          if (canEditDate) ...[
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: _pickDueDate,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(children: [
+                  const Icon(Icons.calendar_today_outlined, size: 14, color: HomiesColors.accent),
+                  const SizedBox(width: 6),
+                  Text(
+                    _dueDate != null ? 'Due ${fmtDate(_dueDate)} · tap to change' : 'Set due date',
+                    style: const TextStyle(color: HomiesColors.accent, fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
+                ]),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           const Divider(),
-          const SizedBox(height: 4),
-          for (final uid in participants)
+          const SizedBox(height: 8),
+          for (final uid in widget.participants)
             _ShareRow(
               uid: uid,
-              payer: payer,
-              shares: shares,
-              paidBy: paidBy,
-              payments: payments,
-              cu: cu,
-              state: state,
-              onMarkPaid: onMarkPaid,
-              onUndo: onUndo,
+              payer: widget.payer,
+              billTitle: widget.title,
+              shares: widget.shares,
+              paidBy: widget.paidBy,
+              payments: widget.payments,
+              cu: widget.cu,
+              state: widget.state,
+              onMarkPaid: widget.onMarkPaid,
+              onUndo: widget.onUndo,
             ),
         ]),
       ),
@@ -955,6 +1128,7 @@ class _PaymentSheet extends StatelessWidget {
 class _ShareRow extends StatelessWidget {
   final String uid;
   final String payer;
+  final String billTitle;
   final Map<String, double> shares;
   final Map<String, bool> paidBy;
   final Map<String, Payment> payments;
@@ -966,6 +1140,7 @@ class _ShareRow extends StatelessWidget {
   const _ShareRow({
     required this.uid,
     required this.payer,
+    required this.billTitle,
     required this.shares,
     required this.paidBy,
     required this.payments,
@@ -1096,6 +1271,18 @@ class _ShareRow extends StatelessWidget {
   }
 
   void _requestPayment(BuildContext context, User user) {
+    final title = 'Payment request';
+    final body = '${cu.name} is requesting your share of $billTitle — ${fmtAUD(shares[uid] ?? 0)}.';
+    final notif = AppNotification(
+      id: 'pr_${DateTime.now().millisecondsSinceEpoch}',
+      kind: 'payment_request',
+      title: title,
+      body: body,
+      at: DateTime.now().toIso8601String(),
+      forUserId: uid,
+    );
+    state.addAppNotification(notif);
+    NotificationService.showNow(5000 + state.appNotifications.length, title, body);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Payment reminder sent to ${user.name} ✓')),
     );
@@ -1129,6 +1316,7 @@ class _RentShareEditorSheetState extends State<_RentShareEditorSheet> {
         amountCtrl: TextEditingController(
           text: (s?.amount ?? equalAmount).toStringAsFixed(0),
         ),
+        reasonCtrl: TextEditingController(text: s?.reason ?? ''),
         hasParking: s?.hasParking ?? false,
         hasBalcony: s?.hasBalcony ?? false,
         hasPrivateWashroom: s?.hasPrivateWashroom ?? false,
@@ -1144,6 +1332,7 @@ class _RentShareEditorSheetState extends State<_RentShareEditorSheet> {
   void dispose() {
     for (final e in _entries) {
       e.amountCtrl.dispose();
+      e.reasonCtrl.dispose();
     }
     _explanationCtrl.dispose();
     super.dispose();
@@ -1161,12 +1350,12 @@ class _RentShareEditorSheetState extends State<_RentShareEditorSheet> {
   }
 
   bool get _allFeaturesJustify {
-    // Every person with a higher-than-equal share has at least one feature
+    // Every person paying more than equal share must have a feature or a reason
     if (_entries.isEmpty) return true;
     final equal = _total / _entries.length;
     for (final e in _entries) {
       final amt = double.tryParse(e.amountCtrl.text.trim()) ?? 0;
-      if (amt > equal + 0.01 && !e.hasParking && !e.hasBalcony && !e.hasPrivateWashroom) return false;
+      if (amt > equal + 0.01 && !e.hasParking && !e.hasBalcony && !e.hasPrivateWashroom && e.reasonCtrl.text.trim().isEmpty) return false;
     }
     return true;
   }
@@ -1199,6 +1388,7 @@ class _RentShareEditorSheetState extends State<_RentShareEditorSheet> {
         hasParking: e.hasParking,
         hasBalcony: e.hasBalcony,
         hasPrivateWashroom: e.hasPrivateWashroom,
+        reason: e.reasonCtrl.text.trim().isEmpty ? null : e.reasonCtrl.text.trim(),
       )).toList();
       state.property.rentShareExplanation =
           _needsExplanation ? _explanationCtrl.text.trim() : null;
@@ -1220,7 +1410,7 @@ class _RentShareEditorSheetState extends State<_RentShareEditorSheet> {
       maxChildSize: 0.95,
       expand: false,
       builder: (_, ctrl) => Padding(
-        padding: EdgeInsets.fromLTRB(16, 8, 16, MediaQuery.of(context).viewInsets.bottom + 24),
+        padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewInsets.bottom + 28),
         child: ListView(controller: ctrl, children: [
           Center(
             child: Container(
@@ -1277,6 +1467,7 @@ class _RentShareEditorSheetState extends State<_RentShareEditorSheet> {
 class _ShareEntry {
   final User user;
   final TextEditingController amountCtrl;
+  final TextEditingController reasonCtrl;
   bool hasParking;
   bool hasBalcony;
   bool hasPrivateWashroom;
@@ -1284,6 +1475,7 @@ class _ShareEntry {
   _ShareEntry({
     required this.user,
     required this.amountCtrl,
+    required this.reasonCtrl,
     this.hasParking = false,
     this.hasBalcony = false,
     this.hasPrivateWashroom = false,
@@ -1353,6 +1545,16 @@ class _EntryCard extends StatelessWidget {
             },
           ),
         ]),
+        const SizedBox(height: 8),
+        TextField(
+          controller: entry.reasonCtrl,
+          onChanged: (_) => onChanged(),
+          decoration: const InputDecoration(
+            hintText: 'Reason, e.g. master bedroom, has garage…',
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          ),
+        ),
       ]),
     );
   }
@@ -1377,4 +1579,158 @@ class _FeatureToggle extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 4),
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       );
+}
+
+// ─── Rent schedule sheet ──────────────────────────────────────────────────────
+
+class _RentScheduleSheet extends StatefulWidget {
+  final HomiesState state;
+  const _RentScheduleSheet({required this.state});
+
+  @override
+  State<_RentScheduleSheet> createState() => _RentScheduleSheetState();
+}
+
+class _RentScheduleSheetState extends State<_RentScheduleSheet> {
+  late String _cadence;
+  DateTime? _startDate;
+
+  static const _cadenceOptions = [
+    ('weekly', 'Weekly'),
+    ('fortnightly', 'Fortnightly'),
+    ('monthly', 'Monthly'),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _cadence = widget.state.property.rentCadence;
+    _startDate = parseIso(widget.state.property.rentStartDate);
+  }
+
+  void _save() {
+    if (_startDate == null) return;
+    widget.state.mutate(() {
+      widget.state.property.rentCadence = _cadence;
+      widget.state.property.rentStartDate = toIso(_startDate);
+    });
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Rent schedule saved ✓')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.55,
+      minChildSize: 0.4,
+      maxChildSize: 0.75,
+      expand: false,
+      builder: (_, ctrl) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(context).viewInsets.bottom + 28),
+        child: ListView(controller: ctrl, children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 14),
+              decoration: BoxDecoration(color: HomiesColors.textFaint, borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          const Text('Rent schedule', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          const Padding(
+            padding: EdgeInsets.only(top: 4, bottom: 20),
+            child: Text(
+              'Set how often rent is due and the date of the first payment.',
+              style: TextStyle(color: HomiesColors.textDim, fontSize: 13),
+            ),
+          ),
+          const FieldLabel('Payment frequency'),
+          const SizedBox(height: 6),
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: HomiesColors.border, width: 1.5),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              children: [
+                for (var i = 0; i < _cadenceOptions.length; i++) ...[
+                  if (i > 0) const Divider(height: 1, indent: 14, endIndent: 14),
+                  InkWell(
+                    borderRadius: BorderRadius.vertical(
+                      top: i == 0 ? const Radius.circular(9) : Radius.zero,
+                      bottom: i == _cadenceOptions.length - 1 ? const Radius.circular(9) : Radius.zero,
+                    ),
+                    onTap: () => setState(() => _cadence = _cadenceOptions[i].$1),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                      child: Row(children: [
+                        Icon(
+                          _cadence == _cadenceOptions[i].$1
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_unchecked,
+                          size: 20,
+                          color: _cadence == _cadenceOptions[i].$1
+                              ? HomiesColors.accent
+                              : HomiesColors.textFaint,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          _cadenceOptions[i].$2,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: _cadence == _cadenceOptions[i].$1
+                                ? HomiesColors.accentStrong
+                                : HomiesColors.text,
+                            fontWeight: _cadence == _cadenceOptions[i].$1
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
+                        ),
+                      ]),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          const FieldLabel('First payment date'),
+          const SizedBox(height: 6),
+          InkWell(
+            onTap: () async {
+              final picked = await pickDate(context, initial: _startDate);
+              if (picked != null) setState(() => _startDate = picked);
+            },
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+              decoration: BoxDecoration(
+                color: HomiesColors.surface,
+                border: Border.all(color: HomiesColors.border, width: 1.5),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(children: [
+                const Icon(Icons.calendar_today_outlined, size: 18, color: HomiesColors.textDim),
+                const SizedBox(width: 10),
+                Text(
+                  _startDate != null ? fmtDate(toIso(_startDate)) : 'Pick a date…',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: _startDate != null ? HomiesColors.text : HomiesColors.textFaint,
+                  ),
+                ),
+              ]),
+            ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: _startDate != null ? _save : null,
+            child: const Text('Save schedule'),
+          ),
+        ]),
+      ),
+    );
+  }
 }

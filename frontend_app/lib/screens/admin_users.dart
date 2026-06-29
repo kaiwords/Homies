@@ -57,7 +57,7 @@ class AdminUsersScreen extends StatelessWidget {
         return SafeArea(
           top: false,
           child: Padding(
-            padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+            padding: EdgeInsets.only(left: 20, right: 20, top: 24, bottom: MediaQuery.of(ctx).viewInsets.bottom + 24),
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               const Text('Add user', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
               const SizedBox(height: 12),

@@ -103,8 +103,9 @@ class DashboardScreen extends StatelessWidget {
 
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 36),
+        child: FadeSlideIn(
+         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           PageHead(
             title: 'Good day, $firstName 👋',
             subtitle: "Here's what's up at home.",
@@ -130,7 +131,7 @@ class DashboardScreen extends StatelessWidget {
             ),
           if (notifSent != null && user.role == 'tenant')
             HomiesCard(
-              borderColor: HomiesColors.accentSoft,
+              borderColor: HomiesColors.accentBorder,
               child: Row(children: [
                 const Icon(Icons.notifications_outlined, size: 20, color: HomiesColors.accent),
                 const SizedBox(width: 10),
@@ -152,7 +153,7 @@ class DashboardScreen extends StatelessWidget {
           // Profile completion banner
           if (!user.profileComplete)
             HomiesCard(
-              borderColor: HomiesColors.warnSoft,
+              borderColor: HomiesColors.warnBorder,
               child: Row(children: [
                 const Text('📝', style: TextStyle(fontSize: 22)),
                 const SizedBox(width: 12),
@@ -171,7 +172,7 @@ class DashboardScreen extends StatelessWidget {
           GestureDetector(
             onTap: () => context.go('/app/finance'),
             child: HomiesCard(
-              borderColor: totalOwed > 0 ? HomiesColors.warnSoft : HomiesColors.okSoft,
+              borderColor: totalOwed > 0 ? HomiesColors.warnBorder : HomiesColors.okBorder,
               child: Row(children: [
                 Container(
                   width: 44,
@@ -228,7 +229,7 @@ class DashboardScreen extends StatelessWidget {
               Container(
                 width: 44,
                 height: 44,
-                decoration: BoxDecoration(color: HomiesColors.accentSoft, borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(color: HomiesColors.accentBorder, borderRadius: BorderRadius.circular(12)),
                 alignment: Alignment.center,
                 child: const Text('🏠', style: TextStyle(fontSize: 20)),
               ),
@@ -272,7 +273,7 @@ class DashboardScreen extends StatelessWidget {
                     child: const Text('All'),
                   ),
                 ]),
-                const SizedBox(height: 4),
+                const SizedBox(height: 10),
                 for (final p in upcomingParties.take(3)) _PartyRow(party: p),
               ]),
             ),
@@ -284,25 +285,25 @@ class DashboardScreen extends StatelessWidget {
                 const Expanded(child: Text('Your cleaning', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600))),
                 HomiesChip(cadenceLabel(cadence), tone: ChipTone.accent),
               ]),
-              const SizedBox(height: 4),
+              const SizedBox(height: 10),
               if (myRoster.isEmpty && myTasks.isEmpty)
                 const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 6),
+                  padding: EdgeInsets.symmetric(vertical: 8),
                   child: Text("You're all clear — nothing assigned to you right now. 🎉",
                       style: TextStyle(color: HomiesColors.textDim, fontSize: 13)),
                 ),
               for (final r in myRoster)
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  padding: const EdgeInsets.symmetric(vertical: 7),
                   child: Row(children: [
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(color: HomiesColors.accentSoft, borderRadius: BorderRadius.circular(8)),
+                      decoration: BoxDecoration(color: HomiesColors.accentBorder, borderRadius: BorderRadius.circular(8)),
                       child: Text(r.day,
                           style: const TextStyle(
                               fontWeight: FontWeight.w700, fontSize: 12, color: HomiesColors.accentStrong)),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text(r.area.isNotEmpty ? r.area : 'General clean',
@@ -318,10 +319,10 @@ class DashboardScreen extends StatelessWidget {
                 ),
               for (final t in myTasks)
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  padding: const EdgeInsets.symmetric(vertical: 7),
                   child: Row(children: [
                     const Text('🧹', style: TextStyle(fontSize: 16)),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text(t.task, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
@@ -333,7 +334,7 @@ class DashboardScreen extends StatelessWidget {
                 ),
               if (myRoster.isNotEmpty || myTasks.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.only(top: 12),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: OutlinedButton(
@@ -348,14 +349,14 @@ class DashboardScreen extends StatelessWidget {
             HomiesCard(
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 const Text('Bills due', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 4),
+                const SizedBox(height: 10),
                 for (final b in myUnpaidBills.take(3))
                   _row(context, '💡', b.title,
                       'Due ${fmtRelative(b.dueDate)} · your share ${fmtAUD(b.shares[user.id] ?? 0)}',
                       '/app/bills'),
                 if (myUnpaidBills.length > 3)
                   Padding(
-                    padding: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.only(top: 8),
                     child: Text(
                       '+${myUnpaidBills.length - 3} more — open Finance to view all',
                       style: const TextStyle(color: HomiesColors.textDim, fontSize: 12),
@@ -367,18 +368,20 @@ class DashboardScreen extends StatelessWidget {
           // Open complaints
           if (openComplaints.isNotEmpty)
             HomiesCard(
-              borderColor: HomiesColors.dangerSoft,
+              borderColor: HomiesColors.dangerBorder,
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Text('🚩 Open complaints', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
                 Text(
                   'There ${openComplaints.length == 1 ? 'is' : 'are'} ${openComplaints.length} unresolved.',
                   style: const TextStyle(color: HomiesColors.textDim, fontSize: 12),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 12),
                 OutlinedButton(onPressed: () => context.go('/app/complaints'), child: const Text('Review')),
               ]),
             ),
         ]),
+        ),  // FadeSlideIn
       ),
     );
   }
@@ -439,7 +442,7 @@ class DashboardScreen extends StatelessWidget {
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => Padding(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(ctx).viewInsets.bottom + 24),
+          padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).viewInsets.bottom + 28),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             const Text('Edit rent', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
             const SizedBox(height: 14),
@@ -495,7 +498,7 @@ class _PartyRow extends StatelessWidget {
         Container(
           width: 46,
           padding: const EdgeInsets.symmetric(vertical: 6),
-          decoration: BoxDecoration(color: HomiesColors.accentSoft, borderRadius: BorderRadius.circular(10)),
+          decoration: BoxDecoration(color: HomiesColors.accentBorder, borderRadius: BorderRadius.circular(10)),
           alignment: Alignment.center,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Text(

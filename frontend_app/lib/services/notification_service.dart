@@ -78,6 +78,29 @@ class NotificationService {
     if (_ready) await _plugin.cancelAll();
   }
 
+  /// Fire an immediate (non-scheduled) device notification.
+  static Future<void> showNow(int id, String title, String body) async {
+    if (!_ready) return;
+    try {
+      await _plugin.show(
+        id,
+        title,
+        body,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _channelId,
+            _channelName,
+            channelDescription: _channelDesc,
+            importance: Importance.high,
+            priority: Priority.high,
+            icon: '@mipmap/ic_launcher',
+          ),
+          iOS: DarwinNotificationDetails(),
+        ),
+      );
+    } catch (_) {}
+  }
+
   // ─── Rent ───────────────────────────────────────────────────────────────────
 
   static Future<void> _scheduleRent(HomiesState state, String userId, int hour) async {
