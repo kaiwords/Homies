@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -31,6 +29,8 @@ class LeaseholderOnboardingScreen extends StatefulWidget {
 
 class _LeaseholderOnboardingScreenState extends State<LeaseholderOnboardingScreen> {
   int _step = 0;
+  bool _acceptedTerms = false;
+  bool _finishing = false;
   final _addressCtrl = TextEditingController();
   String _type = 'House';
   int _bedrooms = 3;
@@ -66,7 +66,8 @@ class _LeaseholderOnboardingScreenState extends State<LeaseholderOnboardingScree
     super.dispose();
   }
 
-  void _finish(HomiesState state) {
+  Future<void> _finish(HomiesState state) async {
+    setState(() => _finishing = true);
     state.mutate(() {
       state.property = Property(
         id: state.property.id,
@@ -97,16 +98,6 @@ class _LeaseholderOnboardingScreenState extends State<LeaseholderOnboardingScree
               addedAt: todayIso(),
             ),
       ];
-      state.invites = [
-        for (final i in _invites)
-          if (i.emailCtrl.text.trim().isNotEmpty)
-            Invite(
-              code: 'HMI-${Random().nextInt(0xFFFF).toRadixString(16).toUpperCase().padLeft(4, '0')}',
-              email: i.emailCtrl.text.trim(),
-              role: i.role,
-              sentAt: todayIso(),
-            ),
-      ];
       state.session = Session(userId: state.session.userId, pendingSignup: null);
       if (state.currentUser != null) {
         final cu = state.currentUser!;
@@ -114,15 +105,38 @@ class _LeaseholderOnboardingScreenState extends State<LeaseholderOnboardingScree
         cu.docVerified = true;
         cu.bondPaid = true;
         cu.acceptedRulesAt = todayIso();
+        cu.acceptedTermsAt = _acceptedTerms ? todayIso() : null;
       }
     });
-    context.go('/app');
+
+    try {
+      // Create the house doc (seeded from the local state just set above)
+      // before sending invites, so createInvite() has a houseId to attach
+      // them to.
+      if (state.currentUser?.houseId == null) {
+        await state.createHouse();
+      }
+      for (final i in _invites) {
+        final email = i.emailCtrl.text.trim();
+        if (email.isNotEmpty) {
+          await state.createInvite(email: email, role: i.role);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Some setup steps failed to sync — you can retry from Housemates. ($e)')),
+        );
+      }
+    }
+
+    if (mounted) context.go('/app');
   }
 
   @override
   Widget build(BuildContext context) {
     final state = HomiesScope.of(context);
-    final steps = ['Property', 'Lease & agent', 'Rent & bond', 'House rules', 'Invite housemates'];
+    final steps = ['Property', 'Lease & agent', 'Rent & bond', 'House rules', 'Terms & conditions', 'Invite housemates'];
     final rent = double.tryParse(_rentAmount) ?? 0;
     final bondAmount = rent * _bondWeeks;
     final advanceAmount = rent * _advanceWeeks;
@@ -155,9 +169,21 @@ class _LeaseholderOnboardingScreenState extends State<LeaseholderOnboardingScree
               OutlinedButton(onPressed: _step == 0 ? null : () => setState(() => _step--), child: const Text('← Back')),
               const Spacer(),
               if (_step < steps.length - 1)
-                ElevatedButton(onPressed: () => setState(() => _step++), child: const Text('Continue →'))
+                ElevatedButton(
+                  onPressed: _step == 4 && !_acceptedTerms ? null : () => setState(() => _step++),
+                  child: const Text('Continue →'),
+                )
               else
-                ElevatedButton(onPressed: () => _finish(state), child: const Text('Finish setup ✓')),
+                ElevatedButton(
+                  onPressed: _finishing ? null : () => _finish(state),
+                  child: _finishing
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Finish setup ✓'),
+                ),
             ]),
           ]),
         ),
@@ -293,6 +319,37 @@ class _LeaseholderOnboardingScreenState extends State<LeaseholderOnboardingScree
           OutlinedButton(onPressed: () => setState(() => _ruleCtrls.add(TextEditingController())), child: const Text('+ Add another rule')),
         ]);
       case 4:
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Text('Terms & conditions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          const Text('By creating a house on Homies, you agree to the following responsibilities.', style: TextStyle(color: HomiesColors.textDim)),
+          const SizedBox(height: 12),
+          Container(
+            height: 240,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: HomiesColors.surface2,
+              border: Border.all(color: HomiesColors.border),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: SingleChildScrollView(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                _LhTermsClause('Accurate information', 'You will provide accurate property, lease, and financial information to all housemates.'),
+                _LhTermsClause('Fair administration', 'You will fairly administer bond, rent, and house rule decisions in accordance with local tenancy laws.'),
+                _LhTermsClause('Terms maintenance', 'You will keep the house terms up to date and notify tenants of any changes.'),
+                _LhTermsClause('Legal compliance', 'You are responsible for ensuring this arrangement complies with the applicable tenancy legislation in your state or territory.'),
+                _LhTermsClause('Platform use', 'You will use Homies in good faith and not use the platform to harass, deceive, or discriminate against any housemate.', isLast: true),
+              ]),
+            ),
+          ),
+          CheckboxListTile(
+            value: _acceptedTerms,
+            onChanged: (v) => setState(() => _acceptedTerms = v ?? false),
+            title: const Text('I have read and agree to these terms and conditions.'),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ]);
+      case 5:
       // ignore: unreachable_switch_default
       default:
         return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -363,4 +420,23 @@ class _InviteDraft {
   final emailCtrl = TextEditingController();
   String role = 'tenant';
   void dispose() => emailCtrl.dispose();
+}
+
+class _LhTermsClause extends StatelessWidget {
+  final String title;
+  final String body;
+  final bool isLast;
+  const _LhTermsClause(this.title, this.body, {this.isLast = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: HomiesColors.text)),
+        const SizedBox(height: 2),
+        Text(body, style: const TextStyle(fontSize: 12, color: HomiesColors.textDim, height: 1.5)),
+      ]),
+    );
+  }
 }

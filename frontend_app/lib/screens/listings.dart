@@ -356,23 +356,36 @@ class _ListingsScreenState extends State<ListingsScreen> {
   }
 
   List<({Listing listing, String otherId, String initiatorId, PostMessage last})> _myConversations(HomiesState state, User cu) {
-    final out = <({Listing listing, String otherId, String initiatorId, PostMessage last})>[];
-    final seen = <String>{};
-    for (final l in state.listings) {
-      final partners = <String>{};
-      for (final m in state.postMessages.where((m) => m.listingId == l.id)) {
-        if (m.from == cu.id) partners.add(m.to);
-        if (m.to == cu.id) partners.add(m.from);
+    // Single pass over postMessages (O(M)) instead of nested-looping listings
+    // x partners x postMessages with a re-filter per partner — that used to
+    // recompute from scratch on every rebuild, including remote sync events
+    // now that listings/postMessages sync live via Firestore, which showed
+    // up as UI lag on this screen.
+    final latest = <String, Map<String, PostMessage>>{}; // listingId -> otherId -> latest message
+    for (final m in state.postMessages) {
+      final String otherId;
+      if (m.from == cu.id) {
+        otherId = m.to;
+      } else if (m.to == cu.id) {
+        otherId = m.from;
+      } else {
+        continue;
       }
-      for (final partner in partners) {
-        final key = '${l.id}:$partner';
-        if (seen.contains(key)) continue;
-        seen.add(key);
-        final msgs = threadMessages(state, l.id, cu.id, partner);
-        if (msgs.isEmpty) continue;
-        out.add((listing: l, otherId: partner, initiatorId: cu.id, last: msgs.last));
+      final byOther = latest.putIfAbsent(m.listingId, () => {});
+      final existing = byOther[otherId];
+      if (existing == null || m.at.compareTo(existing.at) > 0) {
+        byOther[otherId] = m;
       }
     }
+    if (latest.isEmpty) return const [];
+    final listingsById = {for (final l in state.listings) l.id: l};
+    final out = <({Listing listing, String otherId, String initiatorId, PostMessage last})>[];
+    latest.forEach((listingId, byOther) {
+      final listing = listingsById[listingId];
+      if (listing == null) return; // not a room listing (e.g. an essentials business), or deleted
+      byOther.forEach((otherId, last) =>
+          out.add((listing: listing, otherId: otherId, initiatorId: cu.id, last: last)));
+    });
     out.sort((a, b) => b.last.at.compareTo(a.last.at));
     return out;
   }
@@ -626,6 +639,7 @@ class _PostCard extends StatelessWidget {
     final by = state.findUser(listing.by);
     final isRoom = listing.type == 'tenant-wanted';
     final participants = _participantsFor(state, listing);
+    final interestCount = state.listingInterests.where((i) => i.listingId == listing.id).length;
 
     final prefChips = <String>[
       if (listing.billsIncluded) 'Bills incl.',
@@ -676,6 +690,24 @@ class _PostCard extends StatelessWidget {
                       style: const TextStyle(color: HomiesColors.textDim, fontSize: 12)),
                 ]),
               ),
+              if (mine && interestCount > 0)
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: HomiesColors.accentSoft,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.how_to_reg_outlined, size: 13, color: HomiesColors.accent),
+                      const SizedBox(width: 4),
+                      Text('$interestCount ${interestCount == 1 ? 'request' : 'requests'}',
+                          style: const TextStyle(
+                              fontSize: 11, fontWeight: FontWeight.w600, color: HomiesColors.accentStrong)),
+                    ]),
+                  ),
+                ),
               _PostCardMenu(listing: listing, mine: mine),
             ]),
             const SizedBox(height: 12),
@@ -1053,6 +1085,12 @@ class _ReportPostModalState extends State<_ReportPostModal> {
 
 // ─── Interest card ────────────────────────────────────────────────────────────
 
+({IconData icon, Color color}) _interestStatusVisual(String status) => switch (status) {
+      'accepted' => (icon: Icons.check_circle_outline, color: HomiesColors.ok),
+      'declined' => (icon: Icons.cancel_outlined, color: HomiesColors.danger),
+      _ => (icon: Icons.schedule_outlined, color: HomiesColors.warn),
+    };
+
 class _InterestCard extends StatelessWidget {
   final ListingInterest interest;
   const _InterestCard({required this.interest});
@@ -1067,6 +1105,7 @@ class _InterestCard extends StatelessWidget {
         : interest.status == 'declined'
             ? ChipTone.danger
             : ChipTone.warn;
+    final statusVisual = _interestStatusVisual(interest.status);
 
     return HomiesCard(
       color: HomiesColors.surface2,
@@ -1078,7 +1117,11 @@ class _InterestCard extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.w600)),
               Padding(
                   padding: const EdgeInsets.only(top: 4),
-                  child: HomiesChip(interest.status, tone: statusTone)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(statusVisual.icon, size: 13, color: statusVisual.color),
+                    const SizedBox(width: 4),
+                    HomiesChip(interest.status, tone: statusTone),
+                  ])),
             ]),
           ),
           Avatar.sm(from),
@@ -1149,7 +1192,24 @@ class _InterestCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               ElevatedButton(
-                onPressed: () => state.mutate(() => interest.status = 'accepted'),
+                onPressed: () async {
+                  final email = interest.sharedFields['email'] ?? from?.email ?? '';
+                  final invite = await state.createInvite(email: email, role: 'tenant');
+                  state.mutate(() {
+                    interest.status = 'accepted';
+                    interest.inviteCode = invite.code;
+                  });
+                  state.addAppNotification(AppNotification(
+                    id: 'li_${interest.id}_accepted',
+                    kind: 'listing_interest',
+                    title: 'Your application was accepted!',
+                    body: listing != null
+                        ? "You've been invited to join ${listing.title} — open the app to finish joining."
+                        : "You've been invited to join the house — open the app to finish joining.",
+                    at: DateTime.now().toIso8601String(),
+                    forUserId: interest.from,
+                  ));
+                },
                 child: const Text('Accept & share contact'),
               ),
             ]),

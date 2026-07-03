@@ -65,3 +65,55 @@ workflows:
         auth: integration
         submit_to_testflight: true
         submit_to_app_store: false
+
+  android-release:
+    name: Android Release
+    max_build_duration: 60
+    instance_type: linux_x2
+    working_directory: frontend_app
+
+    environment:
+      groups:
+        # Create this group in Codemagic (Settings > Environment variables)
+        # with: CM_KEYSTORE (base64 of upload-keystore.jks), CM_KEYSTORE_PASSWORD,
+        # CM_KEY_ALIAS, CM_KEY_PASSWORD. Mark all four as secret. Never commit
+        # the keystore or these values to the repo.
+        - android_signing
+      vars:
+        PACKAGE_NAME: "au.com.creyeti.homies_mobile"
+      flutter: stable
+
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+
+      - name: Set up Android release signing
+        script: |
+          set -e
+          echo "$CM_KEYSTORE" | base64 --decode > android/upload-keystore.jks
+          cat <<EOF > android/key.properties
+          storePassword=$CM_KEYSTORE_PASSWORD
+          keyPassword=$CM_KEY_PASSWORD
+          keyAlias=$CM_KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
+
+      - name: Build signed App Bundle
+        script: |
+          flutter build appbundle --release
+
+    artifacts:
+      - build/**/outputs/**/*.aab
+      - build/**/outputs/**/mapping.txt
+
+    # No `publishing:` block yet — this workflow builds and signs a .aab you
+    # can download from the Codemagic build artifacts and upload to Play
+    # Console manually. To have Codemagic publish directly, set up a Google
+    # Play service-account integration (Settings > Integrations > Google
+    # Play), add its credentials as GCLOUD_SERVICE_ACCOUNT_CREDENTIALS, then
+    # add:
+    #   publishing:
+    #     google_play:
+    #       credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+    #       track: internal
+    #       submit_as_draft: true

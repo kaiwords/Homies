@@ -4,12 +4,14 @@ import 'package:go_router/go_router.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/ui_kit.dart';
+import 'browser_profile_prompt.dart';
 
 class InviteHandoff {
   final String code;
   final String email;
   final String role;
-  const InviteHandoff({required this.code, required this.email, required this.role});
+  final String houseId;
+  const InviteHandoff({required this.code, required this.email, required this.role, required this.houseId});
 }
 
 class SignupScreen extends StatefulWidget {
@@ -85,18 +87,26 @@ class _SignupScreenState extends State<SignupScreen> {
       _showError(result.error ?? 'Sign-up failed.');
       return;
     }
-    final inviteCode = widget.invite?.code;
-    if (inviteCode != null) {
-      state.mutate(() {
-        for (final i in state.invites) {
-          if (i.code == inviteCode) {
-            i.status = 'accepted';
-          }
+
+    final invite = widget.invite;
+    if (invite != null && state.currentUser != null) {
+      try {
+        await state.joinHouseByCode(invite.code);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Joined, but couldn't finish linking your account to the house — you may need to ask for a fresh invite. ($e)")),
+          );
         }
-      });
+      }
     }
+    if (!mounted) return;
     if (!isMember) {
-      // Browsers land straight in the marketplace — no house onboarding.
+      // Browsers skip house onboarding, but get a quick (skippable) prompt
+      // to fill in their profile before landing in the marketplace — it's
+      // what leaseholders see when this person later applies for a room.
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => const BrowserProfilePromptScreen()));
+      if (!mounted) return;
       context.go('/app/listings');
       return;
     }

@@ -25,6 +25,7 @@ class _TenantOnboardingScreenState extends State<TenantOnboardingScreen> {
   String _advMethod = 'bank-transfer';
   Attachment? _advFile;
   bool _acceptedRules = false;
+  bool _acceptedTerms = false;
   String? _moveIn;
   Lifestyle? _lifestyle;
   EmergencyContact? _emergency;
@@ -46,6 +47,7 @@ class _TenantOnboardingScreenState extends State<TenantOnboardingScreen> {
       cu.advanceRentPaid = false;
       cu.moveInDate = _moveIn ?? todayIso();
       cu.acceptedRulesAt = _acceptedRules ? todayIso() : null;
+      cu.acceptedTermsAt = _acceptedTerms ? todayIso() : null;
       cu.lifestyle = _lifestyle;
       cu.emergency = _emergency;
       cu.submissions = Submissions(
@@ -88,7 +90,7 @@ class _TenantOnboardingScreenState extends State<TenantOnboardingScreen> {
   Widget build(BuildContext context) {
     final state = HomiesScope.of(context);
     final p = state.property;
-    final steps = ['ID document', 'Bond', 'Advance rent', 'House rules', 'Move-in date', 'Lifestyle & contact'];
+    final steps = ['ID document', 'Bond', 'Advance rent', 'House rules', 'Terms & conditions', 'Move-in date', 'Lifestyle & contact'];
     final bondAmount = (p.rentAmount * p.bondWeeks) / p.maxOccupants.clamp(1, 999);
     final advanceAmount = (p.rentAmount * p.advanceWeeks) / p.maxOccupants.clamp(1, 999);
 
@@ -127,7 +129,7 @@ class _TenantOnboardingScreenState extends State<TenantOnboardingScreen> {
                 )
               else
                 ElevatedButton(
-                  onPressed: _moveIn != null && _profileComplete ? () => _finish(state) : null,
+                  onPressed: _moveIn != null && _profileComplete && _acceptedTerms ? () => _finish(state) : null,
                   child: const Text('Submit for approval ✓'),
                 ),
             ]),
@@ -148,6 +150,8 @@ class _TenantOnboardingScreenState extends State<TenantOnboardingScreen> {
       case 3:
         return _acceptedRules;
       case 4:
+        return _acceptedTerms;
+      case 5:
         return _moveIn != null;
       default:
         return true;
@@ -238,6 +242,48 @@ class _TenantOnboardingScreenState extends State<TenantOnboardingScreen> {
           ),
         ]);
       case 4:
+        final t = state.houseTerms;
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Text('Terms & conditions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          const Text('Read and accept the house terms before completing your move-in.', style: TextStyle(color: HomiesColors.textDim)),
+          const SizedBox(height: 12),
+          Container(
+            height: 260,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: HomiesColors.surface2,
+              border: Border.all(color: HomiesColors.border),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: SingleChildScrollView(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                _tRow('Minimum stay', '${t.minStayMonths} month${t.minStayMonths == 1 ? '' : 's'}'),
+                _tRow('Notice period', '${t.noticePeriodDays} days'),
+                _tRow('Late rent grace', t.lateRentGraceDays == 0 ? 'None' : '${t.lateRentGraceDays} days'),
+                _tRow('Late rent fee', t.lateRentFeePerDay == 0 ? 'No fee' : '\$${t.lateRentFeePerDay.toStringAsFixed(0)}/day'),
+                _tRow('Overnight guests', t.maxGuestNightsPerWeek == 0 ? 'Not permitted' : '${t.maxGuestNightsPerWeek} nights/week'),
+                _tRow('Quiet hours', '${t.quietHoursStart} – ${t.quietHoursEnd}'),
+                _tRow('Pets', t.petsAllowed ? 'Allowed' : 'Not allowed'),
+                _tRow('Smoking', t.smokingAllowed ? 'Allowed' : 'Not allowed'),
+                _tRow('Subletting', t.sublettingAllowed ? 'Allowed' : 'Not allowed'),
+                if (t.customClauses != null && t.customClauses!.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  const Text('Additional terms', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                  const SizedBox(height: 4),
+                  Text(t.customClauses!, style: const TextStyle(fontSize: 12, color: HomiesColors.textDim, height: 1.5)),
+                ],
+              ]),
+            ),
+          ),
+          CheckboxListTile(
+            value: _acceptedTerms,
+            onChanged: (v) => setState(() => _acceptedTerms = v ?? false),
+            title: const Text('I have read and agree to these terms and conditions.'),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ]);
+      case 5:
         return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const Text('Move-in date', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
           const Text('We use this to prorate your share of bills and rent.', style: TextStyle(color: HomiesColors.textDim)),
@@ -260,7 +306,7 @@ class _TenantOnboardingScreenState extends State<TenantOnboardingScreen> {
             text: "After you submit, the leaseholder will be notified to approve your ID and bond proofs. You'll see status updates on your dashboard.",
           ),
         ]);
-      case 5:
+      case 6:
       // ignore: unreachable_switch_default
       default:
         return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -281,3 +327,16 @@ class _TenantOnboardingScreenState extends State<TenantOnboardingScreen> {
     }
   }
 }
+
+Widget _tRow(String label, String value) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        SizedBox(
+          width: 140,
+          child: Text(label, style: const TextStyle(fontSize: 12, color: HomiesColors.textDim)),
+        ),
+        Expanded(
+          child: Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        ),
+      ]),
+    );

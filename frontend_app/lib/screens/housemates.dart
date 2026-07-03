@@ -1,6 +1,9 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../state/app_state.dart';
 import '../state/models.dart';
@@ -9,6 +12,78 @@ import '../util/format.dart';
 import '../widgets/avatar.dart';
 import '../widgets/lifestyle_fields.dart';
 import '../widgets/ui_kit.dart';
+
+String inviteShareText(Invite invite) =>
+    "You're invited to join our house on Homies! If you already have the app, tap: "
+    "homies://invite/${invite.code} — otherwise install Homies and enter code "
+    "${invite.code} when you sign up.";
+
+/// Opens the leaseholder's default mail app with the invite pre-filled
+/// (to/subject/body) so they can review and hit send themselves — no backend
+/// email-sending infrastructure required.
+Future<void> _sendInviteEmail(Invite invite) async {
+  final uri = Uri(
+    scheme: 'mailto',
+    path: invite.email,
+    queryParameters: {
+      'subject': "You're invited to join our house on Homies",
+      'body': inviteShareText(invite),
+    },
+  );
+  if (await canLaunchUrl(uri)) await launchUrl(uri);
+}
+
+/// Opens the leaseholder's default texting app with the invite pre-filled as
+/// an SMS body to the given number. The `sms:` URI's body param is joined
+/// with `&` on iOS and `?` on Android/everywhere else — a longstanding
+/// platform quirk, not a typo.
+Future<void> _sendInviteSms(Invite invite) async {
+  final phone = invite.phone;
+  if (phone == null || phone.isEmpty) return;
+  final separator = defaultTargetPlatform == TargetPlatform.iOS ? '&' : '?';
+  final uri = Uri.parse('sms:$phone$separator' 'body=${Uri.encodeComponent(inviteShareText(invite))}');
+  if (await canLaunchUrl(uri)) await launchUrl(uri);
+}
+
+/// After creating an invite, let the leaseholder pick how to send it: open
+/// their email or texting app pre-filled, or the general OS share sheet.
+void _showSendOptions(BuildContext context, Invite invite) {
+  showModalBottomSheet(
+    context: context,
+    builder: (_) => SafeArea(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(
+          leading: const Icon(Icons.email_outlined),
+          title: const Text('Open in email app'),
+          subtitle: Text('Pre-filled to ${invite.email}'),
+          onTap: () {
+            Navigator.pop(context);
+            _sendInviteEmail(invite);
+          },
+        ),
+        if (invite.phone != null && invite.phone!.isNotEmpty)
+          ListTile(
+            leading: const Icon(Icons.sms_outlined),
+            title: const Text('Text invite'),
+            subtitle: Text('Pre-filled to ${invite.phone}'),
+            onTap: () {
+              Navigator.pop(context);
+              _sendInviteSms(invite);
+            },
+          ),
+        ListTile(
+          leading: const Icon(Icons.share_outlined),
+          title: const Text('Share via…'),
+          subtitle: const Text('Text, WhatsApp, or anything else'),
+          onTap: () {
+            Navigator.pop(context);
+            Share.share(inviteShareText(invite));
+          },
+        ),
+      ]),
+    ),
+  );
+}
 
 class HousematesScreen extends StatefulWidget {
   const HousematesScreen({super.key});
@@ -56,10 +131,35 @@ class _HousematesScreenState extends State<HousematesScreen> {
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text(i.email, style: const TextStyle(fontWeight: FontWeight.w600)),
-                          Text('${i.role} · code ${i.code} · sent ${fmtDate(i.sentAt)}',
-                              style: const TextStyle(color: HomiesColors.textDim, fontSize: 12)),
+                          Text(
+                            [
+                              i.role,
+                              'code ${i.code}',
+                              if (i.phone != null && i.phone!.isNotEmpty) i.phone!,
+                              'sent ${fmtDate(i.sentAt)}',
+                            ].join(' · '),
+                            style: const TextStyle(color: HomiesColors.textDim, fontSize: 12),
+                          ),
                         ]),
                       ),
+                      if (i.status == 'sent') ...[
+                        IconButton(
+                          tooltip: 'Open in email app',
+                          icon: const Icon(Icons.email_outlined, size: 18, color: HomiesColors.textDim),
+                          onPressed: () => _sendInviteEmail(i),
+                        ),
+                        if (i.phone != null && i.phone!.isNotEmpty)
+                          IconButton(
+                            tooltip: 'Text invite',
+                            icon: const Icon(Icons.sms_outlined, size: 18, color: HomiesColors.textDim),
+                            onPressed: () => _sendInviteSms(i),
+                          ),
+                        IconButton(
+                          tooltip: 'Share invite link',
+                          icon: const Icon(Icons.share_outlined, size: 18, color: HomiesColors.textDim),
+                          onPressed: () => Share.share(inviteShareText(i)),
+                        ),
+                      ],
                     ]),
                   ),
               ]),
@@ -71,6 +171,7 @@ class _HousematesScreenState extends State<HousematesScreen> {
 
   void _showInvite(BuildContext context, HomiesState state) {
     final emailCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
     String role = 'tenant';
     showModalBottomSheet(
       context: context,
@@ -84,6 +185,13 @@ class _HousematesScreenState extends State<HousematesScreen> {
             const FieldLabel('Email'),
             TextField(controller: emailCtrl, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(hintText: 'housemate@example.com')),
             const SizedBox(height: 16),
+            const FieldLabel('Mobile number (optional)'),
+            TextField(
+              controller: phoneCtrl,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(hintText: '+61 4XX XXX XXX'),
+            ),
+            const SizedBox(height: 16),
             const FieldLabel('Role'),
             Segment<String>(
               options: const ['tenant', 'leaseholder'],
@@ -96,18 +204,17 @@ class _HousematesScreenState extends State<HousematesScreen> {
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               const SizedBox(width: 8),
               ElevatedButton(
-                onPressed: () {
+                onPressed: () async {
                   final email = emailCtrl.text.trim();
                   if (email.isEmpty) return;
-                  state.mutate(() {
-                    state.invites.add(Invite(
-                      code: 'HMI-${Random().nextInt(0xFFFF).toRadixString(16).toUpperCase().padLeft(4, '0')}',
-                      email: email,
-                      role: role,
-                      sentAt: todayIso(),
-                    ));
-                  });
-                  Navigator.pop(ctx);
+                  final phone = phoneCtrl.text.trim();
+                  final invite = await state.createInvite(
+                    email: email,
+                    phone: phone.isEmpty ? null : phone,
+                    role: role,
+                  );
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (context.mounted) _showSendOptions(context, invite);
                 },
                 child: const Text('Send invite'),
               ),

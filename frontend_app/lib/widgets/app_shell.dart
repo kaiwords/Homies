@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../services/notification_service.dart';
 import '../state/app_state.dart';
 import '../state/models.dart';
 import '../theme.dart';
@@ -40,8 +41,10 @@ const navSections = <NavSection>[
   NavSection('/app/issues',     'House issues', Icons.build_outlined,       'activities'),
   NavSection('/app/complaints', 'Complaints',   Icons.flag_outlined,        'activities'),
 
-  // ── Marketplace ───────────────────────────────────────────────────────────────
-  NavSection('/app/listings', 'Rooms & housemates', Icons.storefront_outlined, 'marketplace'),
+  // ── Community ─────────────────────────────────────────────────────────────────
+  NavSection('/app/listings',    'Rooms & housemates', Icons.storefront_outlined,           'marketplace'),
+  NavSection('/app/essentials',  'Essentials',         Icons.local_mall_outlined,            'marketplace'),
+  NavSection('/app/marketplace', 'Marketplace',        Icons.sell_outlined,                  'marketplace'),
 
   // ── Account ───────────────────────────────────────────────────────────────────
   NavSection('/app/profile',      'Your profile',     Icons.badge_outlined,      'account'),
@@ -56,11 +59,11 @@ const groupLabels = {
   'house':       'My house',
   'money':       'Money',
   'activities':  'Activities',
-  'marketplace': 'Marketplace',
+  'marketplace': 'Community',
   'account':     'Account',
 };
 
-const bottomNavPaths = ['/app', '/app/finance', '/app/cleaning', '/app/messages'];
+const bottomNavPaths = ['/app', '/app/finance', '/app/marketplace', '/app/essentials'];
 
 class AppShell extends StatelessWidget {
   final Widget child;
@@ -73,8 +76,8 @@ class AppShell extends StatelessWidget {
     }
     if (currentLocation.startsWith('/app/finance')) return 1;
     if (currentLocation.startsWith('/app/bills')) return 1;
-    if (currentLocation.startsWith('/app/cleaning')) return 2;
-    if (currentLocation.startsWith('/app/messages')) return 3;
+    if (currentLocation.startsWith('/app/marketplace')) return 2;
+    if (currentLocation.startsWith('/app/essentials')) return 3;
     return 0;
   }
 
@@ -261,18 +264,27 @@ class AppShell extends StatelessWidget {
         ),
       ),
 
-      // Keyed AnimatedSwitcher gives a smooth fade+rise between pages
+      // Keyed AnimatedSwitcher gives a smooth fade+rise between pages.
+      // The outgoing child is hidden immediately (opacity 0) so its content
+      // never bleeds through the transparent incoming screen during the fade-in.
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 240),
         switchInCurve: Curves.easeOutCubic,
         switchOutCurve: Curves.easeIn,
-        transitionBuilder: (child, animation) => FadeTransition(
-          opacity: animation,
-          child: SlideTransition(
-            position: Tween<Offset>(begin: const Offset(0, 0.016), end: Offset.zero)
-                .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-            child: child,
-          ),
+        transitionBuilder: (child, animation) => AnimatedBuilder(
+          animation: animation,
+          builder: (context, _) {
+            final isOutgoing = animation.status == AnimationStatus.reverse ||
+                animation.status == AnimationStatus.dismissed;
+            return Opacity(
+              opacity: isOutgoing ? 0.0 : animation.value,
+              child: SlideTransition(
+                position: Tween<Offset>(begin: const Offset(0, 0.016), end: Offset.zero)
+                    .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+                child: child,
+              ),
+            );
+          },
         ),
         child: KeyedSubtree(key: ValueKey(currentLocation), child: child),
       ),
@@ -289,8 +301,8 @@ class AppShell extends StatelessWidget {
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.home_outlined),                    activeIcon: Icon(Icons.home_rounded),                    label: 'Home'),
             BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet_outlined),  activeIcon: Icon(Icons.account_balance_wallet_rounded),  label: 'Finance'),
-            BottomNavigationBarItem(icon: Icon(Icons.cleaning_services_outlined),       activeIcon: Icon(Icons.cleaning_services_rounded),       label: 'Cleaning'),
-            BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline),              activeIcon: Icon(Icons.chat_bubble_rounded),             label: 'Chat'),
+            BottomNavigationBarItem(icon: Icon(Icons.storefront_outlined),              activeIcon: Icon(Icons.storefront_rounded),              label: 'Marketplace'),
+            BottomNavigationBarItem(icon: Icon(Icons.local_mall_outlined),              activeIcon: Icon(Icons.local_mall_rounded),              label: 'Essentials'),
           ],
         ),
       ),
@@ -363,6 +375,80 @@ class _SettingsSheet extends StatelessWidget {
               context.go('/app/notifications');
             },
           ),
+
+          // ── Remind me about ───────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 2),
+            child: Text(
+              'REMIND ME ABOUT',
+              style: const TextStyle(fontSize: 10, color: HomiesColors.textFaint, letterSpacing: 1.0, fontWeight: FontWeight.w700),
+            ),
+          ),
+          _RemindToggle(
+            icon: Icons.home_outlined,
+            label: 'Rent due',
+            value: state.notifPrefs.rent,
+            onChanged: (v) {
+              state.mutate(() => state.notifPrefs.rent = v);
+              NotificationService.scheduleFromState(state);
+            },
+          ),
+          _RemindToggle(
+            icon: Icons.receipt_long_outlined,
+            label: 'Bills due',
+            value: state.notifPrefs.bills,
+            onChanged: (v) {
+              state.mutate(() => state.notifPrefs.bills = v);
+              NotificationService.scheduleFromState(state);
+            },
+          ),
+          _RemindToggle(
+            icon: Icons.cleaning_services_outlined,
+            label: 'Chores due',
+            value: state.notifPrefs.chores,
+            onChanged: (v) {
+              state.mutate(() => state.notifPrefs.chores = v);
+              NotificationService.scheduleFromState(state);
+            },
+          ),
+          _RemindToggle(
+            icon: Icons.swap_horiz_rounded,
+            label: 'Chore swap requests',
+            value: state.notifPrefs.parties,
+            onChanged: (v) {
+              state.mutate(() => state.notifPrefs.parties = v);
+              NotificationService.scheduleFromState(state);
+            },
+          ),
+          _RemindToggle(
+            icon: Icons.event_repeat_outlined,
+            label: 'Recurring service reminders',
+            value: state.notifPrefs.essentialServices,
+            onChanged: (v) {
+              state.mutate(() => state.notifPrefs.essentialServices = v);
+              NotificationService.scheduleFromState(state);
+            },
+          ),
+
+          Container(height: 1, color: HomiesColors.border),
+
+          // ── Theme ─────────────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 2),
+            child: Text(
+              'APPEARANCE',
+              style: const TextStyle(fontSize: 10, color: HomiesColors.textFaint, letterSpacing: 1.0, fontWeight: FontWeight.w700),
+            ),
+          ),
+          _RemindToggle(
+            icon: Icons.dark_mode_outlined,
+            label: 'Dark mode',
+            value: state.notifPrefs.darkMode,
+            onChanged: (v) => state.mutate(() => state.notifPrefs.darkMode = v),
+          ),
+
+          Container(height: 1, color: HomiesColors.border),
+
           _SettingsTile(
             icon: Icons.badge_outlined,
             label: 'Your profile',
@@ -454,6 +540,33 @@ class _SettingsTile extends StatelessWidget {
             const Icon(Icons.chevron_right, size: 18, color: HomiesColors.textFaint),
         ]),
       ),
+    );
+  }
+}
+
+// ─── Remind toggle (inline switch row in settings sheet) ─────────────────────
+
+class _RemindToggle extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  const _RemindToggle({required this.icon, required this.label, required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      child: Row(children: [
+        Icon(icon, size: 18, color: HomiesColors.textDim),
+        const SizedBox(width: 14),
+        Expanded(child: Text(label, style: const TextStyle(fontSize: 14, color: HomiesColors.text))),
+        Switch(
+          value: value,
+          onChanged: onChanged,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      ]),
     );
   }
 }

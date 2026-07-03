@@ -279,6 +279,7 @@ class User {
   bool docVerified;
   bool advanceRentPaid;
   String? acceptedRulesAt;
+  String? acceptedTermsAt;
   bool pending;
   // Whether this person belongs to the house (leaseholder, or a tenant who
   // accepted a leaseholder's invite). Non-members can only browse the
@@ -299,6 +300,10 @@ class User {
   // Tenant-only: reference to their current/previous leaseholder on Homies.
   String? leaseholderUserId; // Homies user ID of the leaseholder
   String? leaseholderName;   // display name (shown when user not on platform)
+  // The house this user belongs to, once they've created or joined one via
+  // Firestore sync. Null for browsers, demo accounts, and pre-onboarding
+  // leaseholders.
+  String? houseId;
 
   User({
     required this.id,
@@ -314,6 +319,7 @@ class User {
     this.docVerified = false,
     this.advanceRentPaid = false,
     this.acceptedRulesAt,
+    this.acceptedTermsAt,
     this.pending = false,
     this.member = true,
     this.lifestyle,
@@ -326,6 +332,7 @@ class User {
     this.leaseVerification,
     this.leaseholderUserId,
     this.leaseholderName,
+    this.houseId,
   });
 
   bool get isAdmin => role == 'admin';
@@ -349,6 +356,7 @@ class User {
         'docVerified': docVerified,
         'advanceRentPaid': advanceRentPaid,
         'acceptedRulesAt': acceptedRulesAt,
+        'acceptedTermsAt': acceptedTermsAt,
         'pending': pending,
         'member': member,
         'lifestyle': lifestyle?.toJson(),
@@ -361,6 +369,7 @@ class User {
         'leaseVerification': leaseVerification?.toJson(),
         'leaseholderUserId': leaseholderUserId,
         'leaseholderName': leaseholderName,
+        'houseId': houseId,
       };
 
   factory User.fromJson(Map<String, dynamic> j) => User(
@@ -377,6 +386,7 @@ class User {
         docVerified: (j['docVerified'] ?? false) as bool,
         advanceRentPaid: (j['advanceRentPaid'] ?? false) as bool,
         acceptedRulesAt: j['acceptedRulesAt'] as String?,
+        acceptedTermsAt: j['acceptedTermsAt'] as String?,
         pending: (j['pending'] ?? false) as bool,
         member: (j['member'] ?? true) as bool,
         lifestyle: Lifestyle.fromJson(j['lifestyle'] as Map<String, dynamic>?),
@@ -389,6 +399,7 @@ class User {
         leaseVerification: LeaseVerification.fromJson(j['leaseVerification'] as Map<String, dynamic>?),
         leaseholderUserId: j['leaseholderUserId'] as String?,
         leaseholderName: j['leaseholderName'] as String?,
+        houseId: j['houseId'] as String?,
       );
 }
 
@@ -491,16 +502,19 @@ class Property {
 class Invite {
   String code;
   String email;
+  String? phone;
   String role;
   String sentAt;
   String status;
 
-  Invite({required this.code, required this.email, required this.role, required this.sentAt, this.status = 'sent'});
+  Invite({required this.code, required this.email, this.phone, required this.role, required this.sentAt, this.status = 'sent'});
 
-  Map<String, dynamic> toJson() => {'code': code, 'email': email, 'role': role, 'sentAt': sentAt, 'status': status};
+  Map<String, dynamic> toJson() =>
+      {'code': code, 'email': email, 'phone': phone, 'role': role, 'sentAt': sentAt, 'status': status};
   factory Invite.fromJson(Map<String, dynamic> j) => Invite(
         code: j['code'] as String,
         email: j['email'] as String,
+        phone: j['phone'] as String?,
         role: j['role'] as String,
         sentAt: j['sentAt'] as String,
         status: (j['status'] ?? 'sent') as String,
@@ -1048,8 +1062,9 @@ class WelcomeGuide {
 /// with another. Exactly one of [taskId] or [rosterDay] will be set.
 class ChoreSwapRequest {
   String id;
-  String? taskId;     // set for single-task swaps
-  String? rosterDay;  // set for whole-day roster swaps (e.g. 'Mon')
+  String? taskId;      // set for single-task swaps
+  String? rosterDay;   // the day the requester is offering (their own day)
+  String? wantedDay;   // the day they want back in exchange (mutual swap only)
   String fromUserId;
   String fromUserName;
   String? toUserId; // null = open to any housemate
@@ -1065,6 +1080,7 @@ class ChoreSwapRequest {
     required this.id,
     this.taskId,
     this.rosterDay,
+    this.wantedDay,
     required this.fromUserId,
     required this.fromUserName,
     this.toUserId,
@@ -1081,6 +1097,7 @@ class ChoreSwapRequest {
         'id': id,
         'taskId': taskId,
         'rosterDay': rosterDay,
+        'wantedDay': wantedDay,
         'fromUserId': fromUserId,
         'fromUserName': fromUserName,
         'toUserId': toUserId,
@@ -1097,6 +1114,7 @@ class ChoreSwapRequest {
         id: j['id'] as String,
         taskId: j['taskId'] as String?,
         rosterDay: j['rosterDay'] as String?,
+        wantedDay: j['wantedDay'] as String?,
         fromUserId: (j['fromUserId'] ?? '') as String,
         fromUserName: (j['fromUserName'] ?? '') as String,
         toUserId: j['toUserId'] as String?,
@@ -1609,6 +1627,8 @@ class NotificationPrefs {
   bool chores;
   bool parties;
   int hour; // hour of day to fire reminders (0–23)
+  bool darkMode;
+  bool essentialServices;
 
   NotificationPrefs({
     this.rent = true,
@@ -1616,6 +1636,8 @@ class NotificationPrefs {
     this.chores = true,
     this.parties = true,
     this.hour = 8,
+    this.darkMode = false,
+    this.essentialServices = true,
   });
 
   Map<String, dynamic> toJson() => {
@@ -1624,6 +1646,8 @@ class NotificationPrefs {
         'chores': chores,
         'parties': parties,
         'hour': hour,
+        'darkMode': darkMode,
+        'essentialServices': essentialServices,
       };
 
   factory NotificationPrefs.fromJson(Map<String, dynamic> j) => NotificationPrefs(
@@ -1632,6 +1656,8 @@ class NotificationPrefs {
         chores: (j['chores'] ?? true) as bool,
         parties: (j['parties'] ?? true) as bool,
         hour: ((j['hour'] ?? 8) as num).toInt(),
+        darkMode: (j['darkMode'] ?? false) as bool,
+        essentialServices: (j['essentialServices'] ?? true) as bool,
       );
 }
 
@@ -2085,6 +2111,10 @@ class ListingInterest {
   EmergencyContact? emergency;
   String status; // 'pending' | 'accepted' | 'declined'
   String createdAt;
+  // Set when a leaseholder accepts — the invite code created for this
+  // applicant, so the applicant's device can auto-join once it sees this
+  // interest marked accepted.
+  String? inviteCode;
 
   ListingInterest({
     required this.id,
@@ -2097,6 +2127,7 @@ class ListingInterest {
     this.emergency,
     this.status = 'pending',
     required this.createdAt,
+    this.inviteCode,
   }) : sharedFields = sharedFields ?? {};
 
   Map<String, dynamic> toJson() => {
@@ -2110,6 +2141,7 @@ class ListingInterest {
         'emergency': emergency?.toJson(),
         'status': status,
         'createdAt': createdAt,
+        'inviteCode': inviteCode,
       };
 
   factory ListingInterest.fromJson(Map<String, dynamic> j) => ListingInterest(
@@ -2123,6 +2155,7 @@ class ListingInterest {
         emergency: EmergencyContact.fromJson(j['emergency'] as Map<String, dynamic>?),
         status: (j['status'] ?? 'pending') as String,
         createdAt: (j['createdAt'] ?? '') as String,
+        inviteCode: j['inviteCode'] as String?,
       );
 }
 
@@ -2191,7 +2224,8 @@ class PerfSnapshot {
   int partiesHosted;
   String house; // address / context the record is from
   String? note; // optional free-text from the tenant
-  String? subject; // tenant the reference is about (set when a leaseholder vouches)
+  String? subject; // display name of the tenant the reference is about (set when a leaseholder vouches)
+  String? subjectId; // user id of the tenant the reference is about — use this to match, not subject
   Lifestyle? lifestyle; // snapshot of the tenant's lifestyle answers
 
   PerfSnapshot({
@@ -2208,6 +2242,7 @@ class PerfSnapshot {
     this.house = '',
     this.note,
     this.subject,
+    this.subjectId,
     this.lifestyle,
   });
 
@@ -2225,6 +2260,7 @@ class PerfSnapshot {
         'house': house,
         'note': note,
         'subject': subject,
+        'subjectId': subjectId,
         'lifestyle': lifestyle?.toJson(),
       };
 
@@ -2244,6 +2280,7 @@ class PerfSnapshot {
       house: (j['house'] ?? '') as String,
       note: j['note'] as String?,
       subject: j['subject'] as String?,
+      subjectId: j['subjectId'] as String?,
       lifestyle: Lifestyle.fromJson(j['lifestyle'] as Map<String, dynamic>?),
     );
   }
@@ -2337,5 +2374,185 @@ class ParkingBooking {
         date: (j['date'] ?? '') as String,
         note: j['note'] as String?,
         createdAt: (j['createdAt'] ?? '') as String,
+      );
+}
+
+// ─── EssentialListing ─────────────────────────────────────────────────────────
+
+class EssentialListing {
+  String id;
+  String postedBy;
+  String businessName;
+  String category; // removal | haircut | cleaning | agency | driving | other
+  String description;
+  String? phone;
+  String? website;
+  String? hours; // free text, e.g. "Mon-Fri 9am-5pm"
+  String? address; // free text, e.g. "12 Smith St, Parramatta"
+  String postedAt;
+  List<String> likes;
+
+  EssentialListing({
+    required this.id,
+    required this.postedBy,
+    required this.businessName,
+    required this.category,
+    required this.description,
+    this.phone,
+    this.website,
+    this.hours,
+    this.address,
+    required this.postedAt,
+    List<String>? likes,
+  }) : likes = likes ?? [];
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'postedBy': postedBy,
+        'businessName': businessName,
+        'category': category,
+        'description': description,
+        if (phone != null) 'phone': phone,
+        if (website != null) 'website': website,
+        if (hours != null) 'hours': hours,
+        if (address != null) 'address': address,
+        'postedAt': postedAt,
+        'likes': likes,
+      };
+
+  factory EssentialListing.fromJson(Map<String, dynamic> j) => EssentialListing(
+        id: j['id'] as String,
+        postedBy: (j['postedBy'] as String?) ?? '',
+        businessName: (j['businessName'] as String?) ?? '',
+        category: (j['category'] as String?) ?? 'other',
+        description: (j['description'] as String?) ?? '',
+        phone: j['phone'] as String?,
+        website: j['website'] as String?,
+        hours: j['hours'] as String?,
+        address: j['address'] as String?,
+        postedAt: (j['postedAt'] as String?) ?? '',
+        likes: List<String>.from((j['likes'] as List?) ?? []),
+      );
+}
+
+// ─── EssentialBooking ─────────────────────────────────────────────────────────
+
+class EssentialBooking {
+  String id;
+  String listingId; // EssentialListing.id
+  String requestedBy; // client user id
+  String businessOwnerId; // EssentialListing.postedBy at time of request
+  String date; // ISO date YYYY-MM-DD
+  String slot; // time, e.g. '10:00 am'
+  String note;
+  String status; // 'pending' | 'confirmed' | 'declined' | 'cancelled'
+  String createdAt;
+  String updatedAt;
+  // If set, the client wants this appointment to repeat — 'weekly' |
+  // 'fortnightly' | 'monthly' (same cadence vocabulary as Property.rentCadence).
+  // Null means a one-off appointment (the default).
+  String? frequency;
+
+  EssentialBooking({
+    required this.id,
+    required this.listingId,
+    required this.requestedBy,
+    required this.businessOwnerId,
+    required this.date,
+    this.slot = '',
+    this.note = '',
+    this.status = 'pending',
+    required this.createdAt,
+    required this.updatedAt,
+    this.frequency,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'listingId': listingId,
+        'requestedBy': requestedBy,
+        'businessOwnerId': businessOwnerId,
+        'date': date,
+        'slot': slot,
+        'note': note,
+        'status': status,
+        'createdAt': createdAt,
+        'updatedAt': updatedAt,
+        'frequency': frequency,
+      };
+
+  factory EssentialBooking.fromJson(Map<String, dynamic> j) => EssentialBooking(
+        id: j['id'] as String,
+        listingId: (j['listingId'] ?? '') as String,
+        requestedBy: (j['requestedBy'] ?? '') as String,
+        businessOwnerId: (j['businessOwnerId'] ?? '') as String,
+        date: (j['date'] ?? '') as String,
+        slot: (j['slot'] ?? '') as String,
+        note: (j['note'] ?? '') as String,
+        status: (j['status'] ?? 'pending') as String,
+        createdAt: (j['createdAt'] ?? '') as String,
+        updatedAt: (j['updatedAt'] ?? '') as String,
+        frequency: j['frequency'] as String?,
+      );
+}
+
+// ─── GoodsListing ─────────────────────────────────────────────────────────────
+
+class GoodsListing {
+  String id;
+  String postedBy;
+  String title;
+  String description;
+  double price;
+  String category; // furniture | electronics | appliances | kitchenware | books | clothing | sports | other
+  String condition; // new | like_new | good | fair | used
+  String? location;
+  List<Attachment> photos; // max 3, enforced in the post-item UI
+  String status; // 'available' | 'sold'
+  String postedAt;
+
+  GoodsListing({
+    required this.id,
+    required this.postedBy,
+    required this.title,
+    required this.description,
+    required this.price,
+    required this.category,
+    this.condition = 'good',
+    this.location,
+    List<Attachment>? photos,
+    this.status = 'available',
+    required this.postedAt,
+  }) : photos = photos ?? [];
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'postedBy': postedBy,
+        'title': title,
+        'description': description,
+        'price': price,
+        'category': category,
+        'condition': condition,
+        'location': location,
+        'photos': photos.map((p) => p.toJson()).toList(),
+        'status': status,
+        'postedAt': postedAt,
+      };
+
+  factory GoodsListing.fromJson(Map<String, dynamic> j) => GoodsListing(
+        id: j['id'] as String,
+        postedBy: (j['postedBy'] ?? '') as String,
+        title: (j['title'] ?? '') as String,
+        description: (j['description'] ?? '') as String,
+        price: ((j['price'] ?? 0) as num).toDouble(),
+        category: (j['category'] ?? 'other') as String,
+        condition: (j['condition'] ?? 'good') as String,
+        location: j['location'] as String?,
+        photos: ((j['photos'] as List?) ?? [])
+            .map((e) => Attachment.fromJson(e as Map<String, dynamic>?))
+            .whereType<Attachment>()
+            .toList(),
+        status: (j['status'] ?? 'available') as String,
+        postedAt: (j['postedAt'] ?? '') as String,
       );
 }

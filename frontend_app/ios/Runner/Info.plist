@@ -53,5 +53,16 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>au.com.creyeti.homies_mobile.invite</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>homies</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

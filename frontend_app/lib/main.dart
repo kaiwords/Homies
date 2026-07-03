@@ -33,6 +33,28 @@ class HomiesApp extends StatefulWidget {
 
 class _HomiesAppState extends State<HomiesApp> {
   late final _router = buildRouter(widget.state);
+  late bool _isDark = widget.state.notifPrefs.darkMode;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.state.addListener(_onStateChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.state.removeListener(_onStateChanged);
+    super.dispose();
+  }
+
+  // HomiesState.notifyListeners() fires on every mutation app-wide (chat,
+  // chores, bills, etc.), not just theme changes. Only rebuild MaterialApp
+  // (which HomiesScope's own InheritedNotifier doesn't cover) when the
+  // dark-mode flag actually flips, instead of on every unrelated mutation.
+  void _onStateChanged() {
+    final isDark = widget.state.notifPrefs.darkMode;
+    if (isDark != _isDark) setState(() => _isDark = isDark);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,6 +64,8 @@ class _HomiesAppState extends State<HomiesApp> {
         title: 'homies',
         debugShowCheckedModeBanner: false,
         theme: buildHomiesTheme(),
+        darkTheme: buildHomiesDarkTheme(),
+        themeMode: _isDark ? ThemeMode.dark : ThemeMode.light,
         routerConfig: _router,
       ),
     );

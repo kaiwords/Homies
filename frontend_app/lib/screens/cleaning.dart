@@ -743,9 +743,28 @@ class _IncomingSwapTile extends StatelessWidget {
     final state = HomiesScope.of(context);
     final cu = state.currentUser!;
     final isDaySwap = request.rosterDay != null;
+    final isMutual = isDaySwap && request.wantedDay != null;
     final task = isDaySwap ? null : state.cleaningTasks.firstWhereOrNull((t) => t.id == request.taskId);
-    final rosterEntry = isDaySwap ? state.cleaningRoster.firstWhereOrNull((r) => r.day == request.rosterDay) : null;
+    final offeredEntry = isDaySwap ? state.cleaningRoster.firstWhereOrNull((r) => r.day == request.rosterDay) : null;
+    final wantedEntry = isMutual ? state.cleaningRoster.firstWhereOrNull((r) => r.day == request.wantedDay) : null;
     final requester = state.activeHousemates.firstWhereOrNull((u) => u.id == request.fromUserId);
+
+    String subtitle;
+    if (isDaySwap) {
+      final offeredLabel = offeredEntry?.area.isNotEmpty == true
+          ? '${request.rosterDay} (${offeredEntry!.area})'
+          : request.rosterDay!;
+      if (isMutual) {
+        final wantedLabel = wantedEntry?.area.isNotEmpty == true
+            ? '${request.wantedDay} (${wantedEntry!.area})'
+            : request.wantedDay!;
+        subtitle = 'Proposing a swap: their $offeredLabel ↔ your $wantedLabel';
+      } else {
+        subtitle = 'Wants someone to cover their $offeredLabel cleaning';
+      }
+    } else {
+      subtitle = 'Wants to swap: ${task?.task ?? 'Unknown task'}';
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
@@ -762,18 +781,31 @@ class _IncomingSwapTile extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(request.fromUserName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-              Text(
-                isDaySwap
-                    ? 'wants to swap: ${request.rosterDay} cleaning${rosterEntry?.area.isNotEmpty == true ? ' (${rosterEntry!.area})' : ''}'
-                    : 'wants to swap: ${task?.task ?? 'Unknown task'}',
-                style: const TextStyle(fontSize: 12, color: HomiesColors.textDim),
-              ),
+              Text(subtitle, style: const TextStyle(fontSize: 12, color: HomiesColors.textDim)),
               if (!isDaySwap && task != null)
                 Text('Due ${fmtDate(task.dueDate)}',
                     style: const TextStyle(fontSize: 11, color: HomiesColors.textFaint)),
             ]),
           ),
         ]),
+        if (isMutual) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: HomiesColors.accentSoft,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.swap_horiz_rounded, size: 14, color: HomiesColors.accentStrong),
+              const SizedBox(width: 6),
+              Text(
+                'If you accept: you take ${request.rosterDay}, they take ${request.wantedDay}',
+                style: const TextStyle(fontSize: 11, color: HomiesColors.accentStrong, fontWeight: FontWeight.w500),
+              ),
+            ]),
+          ),
+        ],
         if (request.note != null && request.note!.isNotEmpty) ...[
           const SizedBox(height: 6),
           Text('"${request.note}"',
@@ -792,25 +824,48 @@ class _IncomingSwapTile extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           ElevatedButton(
-            onPressed: () => state.mutate(() {
-              request.status = 'accepted';
-              request.respondedAt = DateTime.now().toIso8601String();
-              request.respondedBy = cu.id;
-              request.respondedByName = cu.name;
-              if (isDaySwap) {
-                if (rosterEntry != null) rosterEntry.assignee = cu.id;
-              } else {
-                if (task != null) task.assignee = cu.id;
+            onPressed: () {
+              // The wanted day may have changed hands since this request was
+              // made (e.g. another swap was accepted in the meantime) — don't
+              // silently reassign it away from whoever holds it now.
+              if (isMutual && wantedEntry != null && wantedEntry.assignee != cu.id) {
+                state.mutate(() {
+                  request.status = 'declined';
+                  request.respondedAt = DateTime.now().toIso8601String();
+                  request.respondedBy = cu.id;
+                  request.respondedByName = cu.name;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('This swap is no longer valid — that day has already changed hands.')),
+                );
+                return;
               }
-              for (final other in state.choreSwaps) {
-                if (other.id != request.id && other.status == 'pending') {
-                  final sameSlot = isDaySwap
-                      ? other.rosterDay == request.rosterDay
-                      : other.taskId == request.taskId;
-                  if (sameSlot) other.status = 'cancelled';
+              state.mutate(() {
+                request.status = 'accepted';
+                request.respondedAt = DateTime.now().toIso8601String();
+                request.respondedBy = cu.id;
+                request.respondedByName = cu.name;
+                if (isDaySwap) {
+                  // Accepting user takes the offered day
+                  if (offeredEntry != null) offeredEntry.assignee = cu.id;
+                  // Mutual: requester gets the wanted day in return
+                  if (isMutual && wantedEntry != null) {
+                    wantedEntry.assignee = request.fromUserId;
+                  }
+                } else {
+                  if (task != null) task.assignee = cu.id;
                 }
-              }
-            }),
+                for (final other in state.choreSwaps) {
+                  if (other.id != request.id && other.status == 'pending') {
+                    final sameSlot = isDaySwap
+                        ? (other.rosterDay == request.rosterDay ||
+                            (isMutual && other.wantedDay == request.wantedDay))
+                        : other.taskId == request.taskId;
+                    if (sameSlot) other.status = 'cancelled';
+                  }
+                }
+              });
+            },
             child: const Text('Accept'),
           ),
         ]),
@@ -827,12 +882,19 @@ class _MySwapTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = HomiesScope.of(context);
     final isDaySwap = request.rosterDay != null;
+    final isMutual = isDaySwap && request.wantedDay != null;
     final task = isDaySwap ? null : state.cleaningTasks.firstWhereOrNull((t) => t.id == request.taskId);
-    final rosterEntry = isDaySwap ? state.cleaningRoster.firstWhereOrNull((r) => r.day == request.rosterDay) : null;
+    final offeredEntry = isDaySwap ? state.cleaningRoster.firstWhereOrNull((r) => r.day == request.rosterDay) : null;
 
-    final label = isDaySwap
-        ? '${request.rosterDay} cleaning${rosterEntry?.area.isNotEmpty == true ? ' (${rosterEntry!.area})' : ''}'
-        : (task?.task ?? 'Unknown task');
+    final String label;
+    if (isDaySwap) {
+      final offeredLabel = offeredEntry?.area.isNotEmpty == true
+          ? '${request.rosterDay} (${offeredEntry!.area})'
+          : request.rosterDay!;
+      label = isMutual ? '$offeredLabel ↔ ${request.wantedDay}' : '$offeredLabel cleaning';
+    } else {
+      label = task?.task ?? 'Unknown task';
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
@@ -847,7 +909,11 @@ class _MySwapTile extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
             Text(
-              request.toUserId == null ? 'Open to anyone' : 'Directed at ${request.toUserName ?? ''}',
+              request.toUserId == null
+                  ? 'Open to anyone'
+                  : isMutual
+                      ? 'Proposed to ${request.toUserName ?? ''}'
+                      : 'Directed at ${request.toUserName ?? ''}',
               style: const TextStyle(fontSize: 12, color: HomiesColors.textDim),
             ),
             if (request.note != null && request.note!.isNotEmpty)
@@ -877,6 +943,7 @@ class _DaySwapSheet extends StatefulWidget {
 class _DaySwapSheetState extends State<_DaySwapSheet> {
   String? toUserId;
   String? toUserName;
+  String? wantedDay;
   final _noteCtrl = TextEditingController();
 
   @override
@@ -899,6 +966,11 @@ class _DaySwapSheetState extends State<_DaySwapSheet> {
         ? 'Swap ${widget.day} (${widget.area})'
         : 'Swap ${widget.day} cleaning';
 
+    // Roster days assigned to the selected person (potential days to get in return)
+    final theirDays = toUserId == null
+        ? <CleaningRosterEntry>[]
+        : state.cleaningRoster.where((r) => r.assignee == toUserId).toList();
+
     return Padding(
       padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 24),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -906,23 +978,60 @@ class _DaySwapSheetState extends State<_DaySwapSheet> {
           Expanded(child: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600))),
           IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
         ]),
+        const SizedBox(height: 4),
+        const Text('Offer your day to another housemate in exchange for one of theirs.',
+            style: TextStyle(fontSize: 12, color: HomiesColors.textDim)),
         const SizedBox(height: 20),
         if (alreadyPending)
           const Text('You already have a pending swap request for this day.',
               style: TextStyle(color: HomiesColors.textDim))
         else ...[
-          const FieldLabel('Ask who?'),
+          const FieldLabel('Swap with'),
           DropdownButtonFormField<String?>(
             initialValue: toUserId,
             items: [
-              const DropdownMenuItem(value: null, child: Text('Anyone (open request)')),
+              const DropdownMenuItem(value: null, child: Text('Anyone (open — no return day)')),
               for (final u in others) DropdownMenuItem(value: u.id, child: Text(u.name)),
             ],
             onChanged: (v) => setState(() {
               toUserId = v;
               toUserName = v == null ? null : others.firstWhere((u) => u.id == v).name;
+              wantedDay = null; // reset when target changes
             }),
           ),
+          if (toUserId != null) ...[
+            const SizedBox(height: 14),
+            const FieldLabel('In exchange for their day'),
+            const SizedBox(height: 8),
+            if (theirDays.isEmpty)
+              const Text('This person has no assigned days — they\'ll cover your shift without a return.',
+                  style: TextStyle(fontSize: 12, color: HomiesColors.textDim))
+            else
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                for (final entry in theirDays)
+                  GestureDetector(
+                    onTap: () => setState(() => wantedDay = wantedDay == entry.day ? null : entry.day),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 120),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: wantedDay == entry.day ? HomiesColors.accentSoft : HomiesColors.surface2,
+                        border: Border.all(
+                            color: wantedDay == entry.day ? HomiesColors.accentBorder : HomiesColors.border),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        entry.area.isNotEmpty ? '${entry.day} (${entry.area})' : entry.day,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: wantedDay == entry.day ? HomiesColors.accentStrong : HomiesColors.text,
+                        ),
+                      ),
+                    ),
+                  ),
+              ]),
+          ],
           const SizedBox(height: 14),
           const FieldLabel('Note (optional)'),
           TextField(
@@ -935,10 +1044,12 @@ class _DaySwapSheetState extends State<_DaySwapSheet> {
             onPressed: () {
               final swapId = 'sw-${Random().nextInt(0xFFFF).toRadixString(36)}';
               final now = DateTime.now().toIso8601String();
+              final resolvedWantedDay = toUserId != null ? wantedDay : null;
               state.mutate(() {
                 state.choreSwaps.add(ChoreSwapRequest(
                   id: swapId,
                   rosterDay: widget.day,
+                  wantedDay: resolvedWantedDay,
                   fromUserId: cu.id,
                   fromUserName: cu.name,
                   toUserId: toUserId,
@@ -953,18 +1064,23 @@ class _DaySwapSheetState extends State<_DaySwapSheet> {
                   ? [toUserId!]
                   : state.activeHousemates.where((u) => u.id != cu.id).map((u) => u.id).toList();
               for (final tid in targets) {
+                final body = resolvedWantedDay != null
+                    ? '${cu.name} wants to swap: their ${widget.day}$areaLabel ↔ your $resolvedWantedDay$noteLabel. Respond in Cleaning.'
+                    : '${cu.name} is looking for someone to cover their ${widget.day}$areaLabel slot$noteLabel. Respond in Cleaning.';
                 state.addAppNotification(AppNotification(
                   id: 'swap_${swapId}_$tid',
                   kind: 'swap_request',
-                  title: '${cu.name} wants to swap their ${widget.day} clean',
-                  body: '${cu.name} is looking for someone to cover their ${widget.day}$areaLabel slot$noteLabel. Respond in Cleaning.',
+                  title: resolvedWantedDay != null
+                      ? '${cu.name} wants to swap ${widget.day} ↔ $resolvedWantedDay'
+                      : '${cu.name} wants to swap their ${widget.day} clean',
+                  body: body,
                   at: now,
                   forUserId: tid,
                 ));
               }
               Navigator.pop(context);
             },
-            child: const Text('Send request'),
+            child: const Text('Send swap request'),
           ),
         ],
       ]),

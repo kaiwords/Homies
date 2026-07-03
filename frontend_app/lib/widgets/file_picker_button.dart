@@ -87,11 +87,12 @@ class _FilePickerButtonState extends State<FilePickerButton> {
         ),
       ]);
     }
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       OutlinedButton.icon(
         onPressed: _busy ? null : _pick,
         icon: const Icon(Icons.attach_file, size: 18),
         label: Text(_busy ? 'Reading…' : (widget.label ?? 'Choose file')),
+        style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 48)),
       ),
       if (_error != null)
         Padding(

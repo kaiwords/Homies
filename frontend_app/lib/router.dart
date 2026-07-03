@@ -10,6 +10,7 @@ import 'screens/bills.dart';
 import 'screens/cleaning.dart';
 import 'screens/complaints.dart';
 import 'screens/dashboard.dart';
+import 'screens/essentials.dart';
 import 'screens/demo_login.dart';
 import 'screens/groceries.dart';
 import 'screens/house_rules.dart';
@@ -19,6 +20,7 @@ import 'screens/leaseholder_onboarding.dart';
 import 'screens/leaving.dart';
 import 'screens/listings.dart';
 import 'screens/login.dart';
+import 'screens/marketplace.dart';
 import 'screens/messages.dart';
 import 'screens/calendar.dart';
 import 'screens/my_spending.dart';
@@ -145,6 +147,8 @@ GoRouter buildRouter(HomiesState state) {
           GoRoute(path: '/app/welcome-guide', builder: (_, _) => const WelcomeGuideScreen()),
           GoRoute(path: '/app/leaving', builder: (_, _) => const LeavingScreen()),
           GoRoute(path: '/app/terms', builder: (_, _) => const TermsScreen()),
+          GoRoute(path: '/app/essentials', builder: (_, _) => const EssentialsScreen()),
+          GoRoute(path: '/app/marketplace', builder: (_, _) => const GoodsMarketplaceScreen()),
         ],
       ),
       ShellRoute(

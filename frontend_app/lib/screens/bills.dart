@@ -92,7 +92,7 @@ class _BillsScreenState extends State<BillsScreen> {
           ] else if (_tab == 'history') ...[
             if (history.isEmpty)
               const EmptyState(title: 'No settled bills yet', body: 'Once every share on a bill is paid, it lands here as a record.'),
-            for (final b in history) _BillCard(bill: b, canManage: isLeaseholder, onEdit: () => _openBillModal(context, state, b)),
+            for (final b in history) _BillCard(bill: b, canManage: isLeaseholder, onEdit: () => _openBillModal(context, state, b), isHistory: true),
           ] else ...[
             if (schedules.isEmpty)
               const EmptyState(
@@ -145,20 +145,80 @@ class _BillsScreenState extends State<BillsScreen> {
   }
 }
 
-class _BillCard extends StatelessWidget {
+class _BillCard extends StatefulWidget {
   final Bill bill;
   final bool canManage;
   final VoidCallback onEdit;
-  const _BillCard({required this.bill, required this.canManage, required this.onEdit});
+  final bool isHistory;
+  const _BillCard({required this.bill, required this.canManage, required this.onEdit, this.isHistory = false});
+
+  @override
+  State<_BillCard> createState() => _BillCardState();
+}
+
+class _BillCardState extends State<_BillCard> {
+  bool _expanded = false;
 
   @override
   Widget build(BuildContext context) {
     final state = HomiesScope.of(context);
     final cu = state.currentUser!;
-    final b = bill;
+    final b = widget.bill;
     final overdue = (parseIso(b.dueDate)?.isBefore(DateTime.now()) ?? false) && b.status != 'settled';
+    final catEntry = _categories.firstWhere((c) => c[0] == b.category, orElse: () => ['other', '📌 Other']);
+    final catSpaceIdx = catEntry[1].indexOf(' ');
+    final catEmoji = catSpaceIdx == -1 ? '' : catEntry[1].substring(0, catSpaceIdx);
+    final catName = catSpaceIdx == -1 ? catEntry[1] : catEntry[1].substring(catSpaceIdx + 1);
+
+    // ── Collapsed history row ──
+    if (widget.isHistory && !_expanded) {
+      return HomiesCard(
+        child: InkWell(
+          onTap: () => setState(() => _expanded = true),
+          borderRadius: BorderRadius.circular(14),
+          child: Row(children: [
+            Text(catEmoji, style: const TextStyle(fontSize: 18)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(b.title,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1),
+                Text('${fmtDate(b.dueDate)} · $catName',
+                    style: const TextStyle(fontSize: 12, color: HomiesColors.textDim)),
+              ]),
+            ),
+            const SizedBox(width: 10),
+            Text(fmtAUD(b.amount), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+            const SizedBox(width: 4),
+            const Icon(Icons.expand_more_rounded, size: 18, color: HomiesColors.textFaint),
+          ]),
+        ),
+      );
+    }
+
+    // ── Full card (always for upcoming; expanded for history) ──
     return HomiesCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (widget.isHistory) ...[
+          InkWell(
+            onTap: () => setState(() => _expanded = false),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(children: [
+                Text(catEmoji, style: const TextStyle(fontSize: 15)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text('$catName · ${fmtDate(b.dueDate)}',
+                      style: const TextStyle(fontSize: 12, color: HomiesColors.textDim)),
+                ),
+                const Icon(Icons.expand_less_rounded, size: 18, color: HomiesColors.textFaint),
+              ]),
+            ),
+          ),
+        ],
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -179,7 +239,7 @@ class _BillCard extends StatelessWidget {
           ),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text(fmtAUD(b.amount), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
-            if (canManage)
+            if (widget.canManage)
               Row(mainAxisSize: MainAxisSize.min, children: [
                 TextButton(
                   onPressed: () async {
@@ -197,7 +257,7 @@ class _BillCard extends StatelessWidget {
                   },
                   child: const Text('Delete', style: TextStyle(color: HomiesColors.danger)),
                 ),
-                OutlinedButton(onPressed: onEdit, child: const Text('Edit')),
+                OutlinedButton(onPressed: widget.onEdit, child: const Text('Edit')),
               ]),
           ]),
         ]),

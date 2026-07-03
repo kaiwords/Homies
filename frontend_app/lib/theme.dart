@@ -1,10 +1,20 @@
 import 'package:flutter/material.dart';
 
 class HomiesColors {
-  // ── Surfaces ──────────────────────────────────────────────────────────────
+  // ── Surfaces (light) ──────────────────────────────────────────────────────
   static const bg       = Color(0xFFF0EEE8);  // warm linen — earthy, not clinical
   static const surface  = Color(0xFFFEFDF9);  // warm white
   static const surface2 = Color(0xFFF3F1EB);  // recessed warm surface
+
+  // ── Surfaces (dark) ───────────────────────────────────────────────────────
+  static const bgDark       = Color(0xFF1C1A17);
+  static const surfaceDark  = Color(0xFF252320);
+  static const surface2Dark = Color(0xFF2E2C28);
+
+  // ── Text (dark) ───────────────────────────────────────────────────────────
+  static const textDark      = Color(0xFFEDEAE2);
+  static const textDimDark   = Color(0xFF9B948A);
+  static const borderDark    = Color(0xFF3A3730);
 
   // ── Text ──────────────────────────────────────────────────────────────────
   static const text      = Color(0xFF1C1A16);  // warm near-black
@@ -186,6 +196,159 @@ ThemeData buildHomiesTheme() {
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? HomiesColors.accent : HomiesColors.textFaint),
       trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? HomiesColors.accentSoft : const Color(0xFFE0DDD8)),
+      trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
+    ),
+  );
+}
+
+ThemeData buildHomiesDarkTheme() {
+  final scheme = ColorScheme.fromSeed(
+    seedColor: HomiesColors.accent,
+    primary: HomiesColors.accent,
+    surface: HomiesColors.surfaceDark,
+    onSurface: HomiesColors.textDark,
+    brightness: Brightness.dark,
+  );
+
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: HomiesColors.bgDark,
+    fontFamily: 'Roboto',
+
+    textTheme: const TextTheme(
+      headlineLarge:  TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: HomiesColors.textDark,    letterSpacing: -0.6, height: 1.2),
+      headlineMedium: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: HomiesColors.textDark,    letterSpacing: -0.4, height: 1.25),
+      titleLarge:     TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: HomiesColors.textDark,    letterSpacing: -0.2),
+      titleMedium:    TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: HomiesColors.textDark),
+      bodyLarge:      TextStyle(fontSize: 15, color: HomiesColors.textDark,    height: 1.55),
+      bodyMedium:     TextStyle(fontSize: 14, color: HomiesColors.textDark,    height: 1.5),
+      bodySmall:      TextStyle(fontSize: 12, color: HomiesColors.textDimDark, height: 1.45),
+      labelLarge:     TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: HomiesColors.textDark),
+      labelMedium:    TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: HomiesColors.textDimDark),
+      labelSmall:     TextStyle(fontSize: 11, color: HomiesColors.textDimDark, letterSpacing: 0.2),
+    ),
+
+    cardTheme: CardThemeData(
+      color: HomiesColors.surfaceDark,
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: HomiesColors.borderDark),
+      ),
+      margin: const EdgeInsets.symmetric(vertical: 5),
+    ),
+
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: HomiesColors.surface2Dark,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: HomiesColors.borderDark),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: HomiesColors.accent, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: HomiesColors.danger),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: HomiesColors.danger, width: 1.5),
+      ),
+      hintStyle: const TextStyle(color: HomiesColors.textDimDark, fontSize: 14),
+      labelStyle: const TextStyle(color: HomiesColors.textDimDark, fontSize: 13),
+    ),
+
+    appBarTheme: const AppBarTheme(
+      backgroundColor: HomiesColors.surfaceDark,
+      foregroundColor: HomiesColors.textDark,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      surfaceTintColor: Colors.transparent,
+      iconTheme: IconThemeData(color: HomiesColors.textDark, size: 22),
+      titleSpacing: 0,
+    ),
+
+    dividerTheme: const DividerThemeData(color: HomiesColors.borderDark, thickness: 1, space: 16),
+
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: HomiesColors.accent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, letterSpacing: 0.1),
+      ),
+    ),
+
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: HomiesColors.textDark,
+        side: const BorderSide(color: HomiesColors.borderDark),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        textStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+      ),
+    ),
+
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: HomiesColors.accent,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        textStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+      ),
+    ),
+
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      backgroundColor: HomiesColors.surfaceDark,
+      selectedItemColor: HomiesColors.accent,
+      unselectedItemColor: HomiesColors.textDimDark,
+      type: BottomNavigationBarType.fixed,
+      elevation: 0,
+      selectedLabelStyle: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+      unselectedLabelStyle: TextStyle(fontSize: 11),
+    ),
+
+    chipTheme: const ChipThemeData(
+      labelPadding: EdgeInsets.symmetric(horizontal: 4),
+      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      shape: StadiumBorder(),
+    ),
+
+    dialogTheme: DialogThemeData(
+      backgroundColor: HomiesColors.surfaceDark,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 8,
+      shadowColor: const Color(0x50000000),
+    ),
+
+    bottomSheetTheme: const BottomSheetThemeData(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      backgroundColor: HomiesColors.surfaceDark,
+      elevation: 0,
+    ),
+
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: HomiesColors.textDark,
+      contentTextStyle: const TextStyle(color: HomiesColors.bgDark, fontSize: 13, height: 1.4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 4,
+    ),
+
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? HomiesColors.accent : HomiesColors.textDimDark),
+      trackColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected) ? HomiesColors.accentSoft : HomiesColors.borderDark),
       trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
     ),
   );

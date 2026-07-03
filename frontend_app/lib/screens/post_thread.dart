@@ -12,6 +12,7 @@ import '../theme.dart';
 import '../util/format.dart';
 import '../widgets/avatar.dart';
 import '../widgets/lifestyle_fields.dart';
+import '../widgets/media_viewer.dart';
 import '../widgets/ui_kit.dart';
 
 String _pid(String prefix) => '$prefix-${Random().nextInt(0xFFFFFF).toRadixString(36)}';
@@ -272,6 +273,7 @@ class _PostThreadScreenState extends State<PostThreadScreen> {
       if (tenant == null) return;
       final snap = snapshotFor(tenant, state, note: result.note.trim().isEmpty ? null : result.note.trim());
       snap.subject = tenant.name;
+      snap.subjectId = tenant.id;
       _append(state, requesterId, kind: 'perf-share', text: 'Shared a reference for ${tenant.name}.', perf: snap);
       return;
     }
@@ -785,14 +787,14 @@ class _PhotoMessage extends StatelessWidget {
             child: Text(senderName!, style: const TextStyle(fontSize: 11, color: HomiesColors.textDim, fontWeight: FontWeight.w600)),
           ),
         GestureDetector(
-          onTap: bytes == null ? null : () => showDialog(
-            context: context,
-            builder: (_) => Dialog(
-              backgroundColor: Colors.black87,
-              insetPadding: const EdgeInsets.all(16),
-              child: InteractiveViewer(child: Image.memory(bytes)),
+          onTap: bytes == null ? null : () => Navigator.of(context).push(MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => FullscreenImageViewer(
+              bytes: bytes,
+              fileName: attachment.fileName,
+              mimeType: attachment.type,
             ),
-          ),
+          )),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
             child: bytes != null

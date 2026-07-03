@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
@@ -52,6 +53,10 @@ class HomiesState extends ChangeNotifier {
   List<ShoppingItem> shoppingList = SeedData.shoppingList();
   WelcomeGuide welcomeGuide = SeedData.welcomeGuide();
   NotificationPrefs notifPrefs = NotificationPrefs();
+  // Which essentials categories this device's user wants to browse. Empty
+  // means "no preference set yet" — show all categories (unchanged default).
+  List<String> essentialCategoryPrefs = [];
+  List<String> goodsCategoryPrefs = [];
   List<CalendarNote> calendarNotes = [];
   List<AppNotification> appNotifications = [];
   List<LeaseholderReview> lhReviews = [];
@@ -59,8 +64,17 @@ class HomiesState extends ChangeNotifier {
   List<ConditionCheck> conditionChecks = [];
   List<ApplianceBooking> applianceBookings = [];
   List<ParkingBooking> parkingBookings = [];
+  List<EssentialListing> essentials = [];
+  List<EssentialBooking> essentialBookings = [];
+  List<GoodsListing> goodsListings = [];
 
   StreamSubscription<fb.User?>? _authSub;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _houseSub;
+  String? _syncedHouseId;
+  bool _applyingRemoteHouse = false;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _globalSub;
+  bool _globalSyncing = false;
+  bool _applyingRemoteGlobal = false;
 
   User? get currentUser {
     final id = session.userId;
@@ -68,61 +82,23 @@ class HomiesState extends ChangeNotifier {
     return users.firstWhereOrNull((u) => u.id == id);
   }
 
+  /// The house the current user belongs to, if any. Null for browsers, demo
+  /// accounts, and leaseholders who haven't finished onboarding yet — in all
+  /// those cases the app behaves exactly as it did before Firestore sync
+  /// existed (pure local persistence).
+  String? get houseId => currentUser?.houseId;
+
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_storageKey);
     if (raw != null) {
       try {
         final j = jsonDecode(raw) as Map<String, dynamic>;
-        session = Session.fromJson((j['session'] as Map<String, dynamic>?) ?? {});
-        property = j['property'] != null ? Property.fromJson(j['property'] as Map<String, dynamic>) : property;
-        final rawUsers = ((j['users'] as List?) ?? []).map((e) => User.fromJson(e as Map<String, dynamic>)).toList();
-        // Deduplicate by id — last entry wins (most recently written is most up-to-date).
-        final userMap = <String, User>{};
-        for (final u in rawUsers) { userMap[u.id] = u; }
-        users = userMap.values.toList();
-        invites = ((j['invites'] as List?) ?? []).map((e) => Invite.fromJson(e as Map<String, dynamic>)).toList();
-        houseRules = ((j['houseRules'] as List?) ?? []).map((e) => HouseRule.fromJson(e as Map<String, dynamic>)).toList();
-        bills = ((j['bills'] as List?) ?? []).map((e) => Bill.fromJson(e as Map<String, dynamic>)).toList();
-        billSchedules = ((j['billSchedules'] as List?) ?? []).map((e) => BillSchedule.fromJson(e as Map<String, dynamic>)).toList();
-        subscriptions = ((j['subscriptions'] as List?) ?? []).map((e) => Subscription.fromJson(e as Map<String, dynamic>)).toList();
-        necessities = ((j['necessities'] as List?) ?? []).map((e) => Necessity.fromJson(e as Map<String, dynamic>)).toList();
-        groceries = ((j['groceries'] as List?) ?? []).map((e) => Grocery.fromJson(e as Map<String, dynamic>)).toList();
-        cleaningRoster = ((j['cleaningRoster'] as List?) ?? []).map((e) => CleaningRosterEntry.fromJson(e as Map<String, dynamic>)).toList();
-        cleaningTasks = ((j['cleaningTasks'] as List?) ?? []).map((e) => CleaningTask.fromJson(e as Map<String, dynamic>)).toList();
-        cleaningAvailability = ((j['cleaningAvailability'] as List?) ?? []).map((e) => CleaningDayAvailability.fromJson(e as Map<String, dynamic>)).toList();
-        choreSwaps = ((j['choreSwaps'] as List?) ?? []).map((e) => ChoreSwapRequest.fromJson(e as Map<String, dynamic>)).toList();
-        rentShares = ((j['rentShares'] as List?) ?? []).map((e) => RentShare.fromJson(e as Map<String, dynamic>)).toList();
-        rentPayments = ((j['rentPayments'] as List?) ?? []).map((e) => RentPayment.fromJson(e as Map<String, dynamic>)).toList();
-        parties = ((j['parties'] as List?) ?? []).map((e) => Party.fromJson(e as Map<String, dynamic>)).toList();
-        messages = j['messages'] != null ? Messages.fromJson(j['messages'] as Map<String, dynamic>) : messages;
-        complaints = ((j['complaints'] as List?) ?? []).map((e) => Complaint.fromJson(e as Map<String, dynamic>)).toList();
-        issues = ((j['issues'] as List?) ?? []).map((e) => Issue.fromJson(e as Map<String, dynamic>)).toList();
-        notices = ((j['notices'] as List?) ?? []).map((e) => Notice.fromJson(e as Map<String, dynamic>)).toList();
-        termination = j['termination'] != null ? TerminationPlan.fromJson(j['termination'] as Map<String, dynamic>) : null;
-        // Listings — merge persisted with seed so new seed entries always appear.
-        final loadedListings = ((j['listings'] as List?) ?? []).map((e) => Listing.fromJson(e as Map<String, dynamic>)).toList();
-        final listingIds = loadedListings.map((l) => l.id).toSet();
-        listings = [...loadedListings, ...SeedData.listings().where((l) => !listingIds.contains(l.id))];
-        listingInterests = ((j['listingInterests'] as List?) ?? []).map((e) => ListingInterest.fromJson(e as Map<String, dynamic>)).toList();
-        inspections = ((j['inspections'] as List?) ?? []).map((e) => Inspection.fromJson(e as Map<String, dynamic>)).toList();
-        // PostMessages — merge persisted with seed so demo conversations always load.
-        final loadedPMs = ((j['postMessages'] as List?) ?? []).map((e) => PostMessage.fromJson(e as Map<String, dynamic>)).toList();
-        final pmIds = loadedPMs.map((m) => m.id).toSet();
-        postMessages = [...loadedPMs, ...SeedData.postMessages().where((m) => !pmIds.contains(m.id))];
-        personalExpenses = ((j['personalExpenses'] as List?) ?? []).map((e) => PersonalExpense.fromJson(e as Map<String, dynamic>)).toList();
-        maintenanceContacts = ((j['maintenanceContacts'] as List?) ?? SeedData.maintenanceContacts().map((c) => c.toJson()).toList()).map((e) => MaintenanceContact.fromJson(e as Map<String, dynamic>)).toList();
-        shoppingList = ((j['shoppingList'] as List?) ?? []).map((e) => ShoppingItem.fromJson(e as Map<String, dynamic>)).toList();
-        if (j['welcomeGuide'] != null) welcomeGuide = WelcomeGuide.fromJson(j['welcomeGuide'] as Map<String, dynamic>);
-        if (j['notifPrefs'] != null) notifPrefs = NotificationPrefs.fromJson(j['notifPrefs'] as Map<String, dynamic>);
-        calendarNotes = ((j['calendarNotes'] as List?) ?? []).map((e) => CalendarNote.fromJson(e as Map<String, dynamic>)).toList();
-        appNotifications = ((j['appNotifications'] as List?) ?? []).map((e) => AppNotification.fromJson(e as Map<String, dynamic>)).toList();
-        lhReviews = ((j['lhReviews'] as List?) ?? []).map((e) => LeaseholderReview.fromJson(e as Map<String, dynamic>)).toList();
-        if (j['houseTerms'] != null) houseTerms = HouseTerms.fromJson(j['houseTerms'] as Map<String, dynamic>);
-        conditionChecks = ((j['conditionChecks'] as List?) ?? []).map((e) => ConditionCheck.fromJson(e as Map<String, dynamic>)).toList();
-        applianceBookings = ((j['applianceBookings'] as List?) ?? []).map((e) => ApplianceBooking.fromJson(e as Map<String, dynamic>)).toList();
-        parkingBookings = ((j['parkingBookings'] as List?) ?? []).map((e) => ParkingBooking.fromJson(e as Map<String, dynamic>)).toList();
+        _applyLocalOnlyFieldsFromJson(j);
+        _applySharedFieldsFromJson(j);
+        _applyGlobalFieldsFromJson(j);
         notifyListeners();
+        _maybeAutoJoinFromAcceptedInterest();
       } catch (e) {
         if (kDebugMode) {
           // ignore: avoid_print
@@ -133,11 +109,136 @@ class HomiesState extends ChangeNotifier {
     _startAuthListener();
   }
 
+  // ── House-wide (shared, syncs to Firestore) fields ──────────────────────
+  // Deserializes everything EXCEPT session/notifPrefs/welcomeGuide/
+  // appNotifications. Shared by load() (from the local SharedPreferences
+  // cache) and the house-doc snapshot listener (from Firestore) so there's
+  // exactly one place that knows how to parse each field.
+  void _applySharedFieldsFromJson(Map<String, dynamic> j) {
+    property = j['property'] != null ? Property.fromJson(j['property'] as Map<String, dynamic>) : property;
+    final rawUsers = ((j['users'] as List?) ?? []).map((e) => User.fromJson(e as Map<String, dynamic>)).toList();
+    // Deduplicate by id — last entry wins (most recently written is most up-to-date).
+    final userMap = <String, User>{};
+    for (final u in rawUsers) { userMap[u.id] = u; }
+    users = userMap.values.toList();
+    invites = ((j['invites'] as List?) ?? []).map((e) => Invite.fromJson(e as Map<String, dynamic>)).toList();
+    houseRules = ((j['houseRules'] as List?) ?? []).map((e) => HouseRule.fromJson(e as Map<String, dynamic>)).toList();
+    bills = ((j['bills'] as List?) ?? []).map((e) => Bill.fromJson(e as Map<String, dynamic>)).toList();
+    billSchedules = ((j['billSchedules'] as List?) ?? []).map((e) => BillSchedule.fromJson(e as Map<String, dynamic>)).toList();
+    subscriptions = ((j['subscriptions'] as List?) ?? []).map((e) => Subscription.fromJson(e as Map<String, dynamic>)).toList();
+    necessities = ((j['necessities'] as List?) ?? []).map((e) => Necessity.fromJson(e as Map<String, dynamic>)).toList();
+    groceries = ((j['groceries'] as List?) ?? []).map((e) => Grocery.fromJson(e as Map<String, dynamic>)).toList();
+    cleaningRoster = ((j['cleaningRoster'] as List?) ?? []).map((e) => CleaningRosterEntry.fromJson(e as Map<String, dynamic>)).toList();
+    cleaningTasks = ((j['cleaningTasks'] as List?) ?? []).map((e) => CleaningTask.fromJson(e as Map<String, dynamic>)).toList();
+    cleaningAvailability = ((j['cleaningAvailability'] as List?) ?? []).map((e) => CleaningDayAvailability.fromJson(e as Map<String, dynamic>)).toList();
+    choreSwaps = ((j['choreSwaps'] as List?) ?? []).map((e) => ChoreSwapRequest.fromJson(e as Map<String, dynamic>)).toList();
+    rentShares = ((j['rentShares'] as List?) ?? []).map((e) => RentShare.fromJson(e as Map<String, dynamic>)).toList();
+    rentPayments = ((j['rentPayments'] as List?) ?? []).map((e) => RentPayment.fromJson(e as Map<String, dynamic>)).toList();
+    parties = ((j['parties'] as List?) ?? []).map((e) => Party.fromJson(e as Map<String, dynamic>)).toList();
+    messages = j['messages'] != null ? Messages.fromJson(j['messages'] as Map<String, dynamic>) : messages;
+    complaints = ((j['complaints'] as List?) ?? []).map((e) => Complaint.fromJson(e as Map<String, dynamic>)).toList();
+    issues = ((j['issues'] as List?) ?? []).map((e) => Issue.fromJson(e as Map<String, dynamic>)).toList();
+    notices = ((j['notices'] as List?) ?? []).map((e) => Notice.fromJson(e as Map<String, dynamic>)).toList();
+    termination = j['termination'] != null ? TerminationPlan.fromJson(j['termination'] as Map<String, dynamic>) : null;
+    personalExpenses = ((j['personalExpenses'] as List?) ?? []).map((e) => PersonalExpense.fromJson(e as Map<String, dynamic>)).toList();
+    maintenanceContacts = ((j['maintenanceContacts'] as List?) ?? SeedData.maintenanceContacts().map((c) => c.toJson()).toList()).map((e) => MaintenanceContact.fromJson(e as Map<String, dynamic>)).toList();
+    shoppingList = ((j['shoppingList'] as List?) ?? []).map((e) => ShoppingItem.fromJson(e as Map<String, dynamic>)).toList();
+    calendarNotes = ((j['calendarNotes'] as List?) ?? []).map((e) => CalendarNote.fromJson(e as Map<String, dynamic>)).toList();
+    lhReviews = ((j['lhReviews'] as List?) ?? []).map((e) => LeaseholderReview.fromJson(e as Map<String, dynamic>)).toList();
+    if (j['houseTerms'] != null) houseTerms = HouseTerms.fromJson(j['houseTerms'] as Map<String, dynamic>);
+    conditionChecks = ((j['conditionChecks'] as List?) ?? []).map((e) => ConditionCheck.fromJson(e as Map<String, dynamic>)).toList();
+    applianceBookings = ((j['applianceBookings'] as List?) ?? []).map((e) => ApplianceBooking.fromJson(e as Map<String, dynamic>)).toList();
+    parkingBookings = ((j['parkingBookings'] as List?) ?? []).map((e) => ParkingBooking.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  // ── Community-wide (global, syncs to community/global) fields ───────────
+  // Marketplace/essentials data — visible across all houses and to browsers
+  // with no house yet, so it can't live inside a single house's document.
+  void _applyGlobalFieldsFromJson(Map<String, dynamic> j) {
+    // Listings — merge persisted with seed so new seed entries always appear.
+    final loadedListings = ((j['listings'] as List?) ?? []).map((e) => Listing.fromJson(e as Map<String, dynamic>)).toList();
+    final listingIds = loadedListings.map((l) => l.id).toSet();
+    listings = [...loadedListings, ...SeedData.listings().where((l) => !listingIds.contains(l.id))];
+    listingInterests = ((j['listingInterests'] as List?) ?? []).map((e) => ListingInterest.fromJson(e as Map<String, dynamic>)).toList();
+    inspections = ((j['inspections'] as List?) ?? []).map((e) => Inspection.fromJson(e as Map<String, dynamic>)).toList();
+    // PostMessages — merge persisted with seed so demo conversations always load.
+    final loadedPMs = ((j['postMessages'] as List?) ?? []).map((e) => PostMessage.fromJson(e as Map<String, dynamic>)).toList();
+    final pmIds = loadedPMs.map((m) => m.id).toSet();
+    postMessages = [...loadedPMs, ...SeedData.postMessages().where((m) => !pmIds.contains(m.id))];
+    essentials = ((j['essentials'] as List?) ?? []).map((e) => EssentialListing.fromJson(e as Map<String, dynamic>)).toList();
+    essentialBookings = ((j['essentialBookings'] as List?) ?? []).map((e) => EssentialBooking.fromJson(e as Map<String, dynamic>)).toList();
+    appNotifications = ((j['appNotifications'] as List?) ?? []).map((e) => AppNotification.fromJson(e as Map<String, dynamic>)).toList();
+    goodsListings = ((j['goodsListings'] as List?) ?? []).map((e) => GoodsListing.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Map<String, dynamic> _globalFieldsJson() => {
+        'listings': listings.map((l) => l.toJson()).toList(),
+        'listingInterests': listingInterests.map((i) => i.toJson()).toList(),
+        'inspections': inspections.map((i) => i.toJson()).toList(),
+        'postMessages': postMessages.map((m) => m.toJson()).toList(),
+        'essentials': essentials.map((e) => e.toJson()).toList(),
+        'essentialBookings': essentialBookings.map((b) => b.toJson()).toList(),
+        'appNotifications': appNotifications.map((n) => n.toJson()).toList(),
+        'goodsListings': goodsListings.map((g) => g.toJson()).toList(),
+      };
+
+  Map<String, dynamic> _sharedFieldsJson() => {
+        'property': property.toJson(),
+        'users': users.map((u) => u.toJson()).toList(),
+        'invites': invites.map((i) => i.toJson()).toList(),
+        'houseRules': houseRules.map((r) => r.toJson()).toList(),
+        'bills': bills.map((b) => b.toJson()).toList(),
+        'billSchedules': billSchedules.map((b) => b.toJson()).toList(),
+        'subscriptions': subscriptions.map((s) => s.toJson()).toList(),
+        'necessities': necessities.map((n) => n.toJson()).toList(),
+        'groceries': groceries.map((g) => g.toJson()).toList(),
+        'cleaningRoster': cleaningRoster.map((r) => r.toJson()).toList(),
+        'cleaningTasks': cleaningTasks.map((t) => t.toJson()).toList(),
+        'cleaningAvailability': cleaningAvailability.map((a) => a.toJson()).toList(),
+        'choreSwaps': choreSwaps.map((r) => r.toJson()).toList(),
+        'rentShares': rentShares.map((r) => r.toJson()).toList(),
+        'rentPayments': rentPayments.map((p) => p.toJson()).toList(),
+        'parties': parties.map((p) => p.toJson()).toList(),
+        'messages': messages.toJson(),
+        'complaints': complaints.map((c) => c.toJson()).toList(),
+        'issues': issues.map((i) => i.toJson()).toList(),
+        'notices': notices.map((n) => n.toJson()).toList(),
+        'termination': termination?.toJson(),
+        'personalExpenses': personalExpenses.map((e) => e.toJson()).toList(),
+        'maintenanceContacts': maintenanceContacts.map((c) => c.toJson()).toList(),
+        'shoppingList': shoppingList.map((i) => i.toJson()).toList(),
+        'calendarNotes': calendarNotes.map((n) => n.toJson()).toList(),
+        'lhReviews': lhReviews.map((r) => r.toJson()).toList(),
+        'houseTerms': houseTerms.toJson(),
+        'conditionChecks': conditionChecks.map((c) => c.toJson()).toList(),
+        'applianceBookings': applianceBookings.map((b) => b.toJson()).toList(),
+        'parkingBookings': parkingBookings.map((b) => b.toJson()).toList(),
+      };
+
+  // ── Local-only (per-device, never syncs to Firestore) fields ────────────
+  void _applyLocalOnlyFieldsFromJson(Map<String, dynamic> j) {
+    session = Session.fromJson((j['session'] as Map<String, dynamic>?) ?? {});
+    if (j['welcomeGuide'] != null) welcomeGuide = WelcomeGuide.fromJson(j['welcomeGuide'] as Map<String, dynamic>);
+    if (j['notifPrefs'] != null) notifPrefs = NotificationPrefs.fromJson(j['notifPrefs'] as Map<String, dynamic>);
+    essentialCategoryPrefs = List<String>.from((j['essentialCategoryPrefs'] as List?) ?? []);
+    goodsCategoryPrefs = List<String>.from((j['goodsCategoryPrefs'] as List?) ?? []);
+  }
+
+  Map<String, dynamic> _localOnlyFieldsJson() => {
+        'session': session.toJson(),
+        'welcomeGuide': welcomeGuide.toJson(),
+        'notifPrefs': notifPrefs.toJson(),
+        'essentialCategoryPrefs': essentialCategoryPrefs,
+        'goodsCategoryPrefs': goodsCategoryPrefs,
+      };
+
   void _startAuthListener() {
     _authSub?.cancel();
     _authSub = fb.FirebaseAuth.instance.authStateChanges().listen((fbUser) async {
       if (fbUser == null) {
         if (session.userId != null) {
+          stopHouseSync();
+          stopGlobalSync();
           mutate(() {
             session = Session();
           });
@@ -172,6 +273,7 @@ class HomiesState extends ChangeNotifier {
           }
           session = Session(userId: fbUser.uid, pendingSignup: session.pendingSignup);
         });
+        startGlobalSync(); // even a pending/incomplete signup should see the marketplace
         return;
       }
       final remote = User(
@@ -191,6 +293,7 @@ class HomiesState extends ChangeNotifier {
         pending: (data['pending'] as bool?) ?? true,
         member: (data['member'] as bool?) ?? true,
         shareEmergency: (data['shareEmergency'] as bool?) ?? false,
+        houseId: data['houseId'] as String?,
       );
       mutate(() {
         final idx = users.indexWhere((u) => u.id == fbUser.uid);
@@ -201,6 +304,24 @@ class HomiesState extends ChangeNotifier {
         }
         session = Session(userId: fbUser.uid, pendingSignup: session.pendingSignup);
       });
+      startGlobalSync();
+      if (remote.houseId == null) _maybeAutoJoinFromAcceptedInterest();
+      if (remote.houseId != null) {
+        startHouseSync(remote.houseId!);
+      } else if (remote.role == 'leaseholder' && property.setupComplete) {
+        // A leaseholder who finished onboarding before house sync existed —
+        // retroactively create their house doc, seeded from whatever local
+        // data this device already has, instead of routing them back
+        // through onboarding UI. One-time: never fires again once houseId
+        // is set.
+        createHouse().catchError((Object e) {
+          if (kDebugMode) {
+            // ignore: avoid_print
+            print('Retroactive createHouse() failed: $e');
+          }
+          return '';
+        });
+      }
     } catch (e) {
       if (kDebugMode) {
         // ignore: avoid_print
@@ -277,6 +398,8 @@ class HomiesState extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    stopHouseSync();
+    stopGlobalSync();
     await fb.FirebaseAuth.instance.signOut();
     mutate(() {
       session = Session();
@@ -312,47 +435,218 @@ class HomiesState extends ChangeNotifier {
 
   Future<void> _persist() async {
     final prefs = await SharedPreferences.getInstance();
-    final j = {
-      'session': session.toJson(),
-      'property': property.toJson(),
-      'users': users.map((u) => u.toJson()).toList(),
-      'invites': invites.map((i) => i.toJson()).toList(),
-      'houseRules': houseRules.map((r) => r.toJson()).toList(),
-      'bills': bills.map((b) => b.toJson()).toList(),
-      'billSchedules': billSchedules.map((b) => b.toJson()).toList(),
-      'subscriptions': subscriptions.map((s) => s.toJson()).toList(),
-      'necessities': necessities.map((n) => n.toJson()).toList(),
-      'groceries': groceries.map((g) => g.toJson()).toList(),
-      'cleaningRoster': cleaningRoster.map((r) => r.toJson()).toList(),
-      'cleaningTasks': cleaningTasks.map((t) => t.toJson()).toList(),
-      'cleaningAvailability': cleaningAvailability.map((a) => a.toJson()).toList(),
-      'choreSwaps': choreSwaps.map((r) => r.toJson()).toList(),
-      'rentShares': rentShares.map((r) => r.toJson()).toList(),
-      'rentPayments': rentPayments.map((p) => p.toJson()).toList(),
-      'parties': parties.map((p) => p.toJson()).toList(),
-      'messages': messages.toJson(),
-      'complaints': complaints.map((c) => c.toJson()).toList(),
-      'issues': issues.map((i) => i.toJson()).toList(),
-      'notices': notices.map((n) => n.toJson()).toList(),
-      'termination': termination?.toJson(),
-      'listings': listings.map((l) => l.toJson()).toList(),
-      'listingInterests': listingInterests.map((i) => i.toJson()).toList(),
-      'inspections': inspections.map((i) => i.toJson()).toList(),
-      'postMessages': postMessages.map((m) => m.toJson()).toList(),
-      'personalExpenses': personalExpenses.map((e) => e.toJson()).toList(),
-      'maintenanceContacts': maintenanceContacts.map((c) => c.toJson()).toList(),
-      'shoppingList': shoppingList.map((i) => i.toJson()).toList(),
-      'welcomeGuide': welcomeGuide.toJson(),
-      'notifPrefs': notifPrefs.toJson(),
-      'calendarNotes': calendarNotes.map((n) => n.toJson()).toList(),
-      'appNotifications': appNotifications.map((n) => n.toJson()).toList(),
-      'lhReviews': lhReviews.map((r) => r.toJson()).toList(),
-      'houseTerms': houseTerms.toJson(),
-      'conditionChecks': conditionChecks.map((c) => c.toJson()).toList(),
-      'applianceBookings': applianceBookings.map((b) => b.toJson()).toList(),
-      'parkingBookings': parkingBookings.map((b) => b.toJson()).toList(),
-    };
+    final j = {..._sharedFieldsJson(), ..._localOnlyFieldsJson(), ..._globalFieldsJson()};
     await prefs.setString(_storageKey, jsonEncode(j));
+    _pushHouseDocIfNeeded();
+    _pushGlobalDocIfNeeded();
+  }
+
+  // ── Firestore whole-house sync ──────────────────────────────────────────
+  // Pushes the SHARED fields to houses/{houseId} whenever local state
+  // changes (called from _persist(), i.e. on every mutate()). Fire-and-forget,
+  // same as the SharedPreferences write above — offline edits still succeed
+  // locally and Firestore catches up on reconnect.
+  void _pushHouseDocIfNeeded() {
+    if (_applyingRemoteHouse) return; // this write originated from the listener itself — skip
+    final id = houseId;
+    if (id == null) return; // no house yet — pure local persistence, unchanged behavior
+    FirebaseFirestore.instance.collection('houses').doc(id).set({
+      ..._sharedFieldsJson(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'updatedBy': session.userId,
+    }, SetOptions(merge: true)).catchError((Object e) {
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print('Failed to push house doc: $e');
+      }
+    });
+  }
+
+  /// Starts listening for remote changes to houses/{id}. Safe to call
+  /// repeatedly — a no-op if already synced to this house.
+  void startHouseSync(String id) {
+    if (_syncedHouseId == id && _houseSub != null) return;
+    _houseSub?.cancel();
+    _syncedHouseId = id;
+    _houseSub = FirebaseFirestore.instance.collection('houses').doc(id).snapshots().listen(
+      (snap) {
+        if (snap.metadata.hasPendingWrites) return; // optimistic echo of our own write
+        final data = snap.data();
+        if (data == null) return;
+        _applyingRemoteHouse = true;
+        try {
+          _applySharedFieldsFromJson(data);
+          notifyListeners();
+          _persist();
+        } finally {
+          _applyingRemoteHouse = false;
+        }
+      },
+      onError: (Object e) {
+        if (kDebugMode) {
+          // ignore: avoid_print
+          print('House sync error: $e');
+        }
+      },
+    );
+  }
+
+  // ── Firestore community/global sync (marketplace + essentials) ──────────
+  // Same whole-document pattern as the house sync above, but for one
+  // well-known doc shared by every signed-in user regardless of houseId —
+  // marketplace/essentials data isn't scoped to a single house.
+  void _pushGlobalDocIfNeeded() {
+    // Gate on _globalSyncing (not just _applyingRemoteGlobal), same as the
+    // house push gates on houseId — otherwise a demo account (or a real user
+    // before startGlobalSync() has run) would attempt to push local/seed
+    // data into the real shared marketplace doc on every mutate().
+    if (_applyingRemoteGlobal || !_globalSyncing) return;
+    FirebaseFirestore.instance.collection('community').doc('global').set({
+      ..._globalFieldsJson(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'updatedBy': session.userId,
+    }, SetOptions(merge: true)).catchError((Object e) {
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print('Failed to push global doc: $e');
+      }
+    });
+  }
+
+  /// Starts listening for remote changes to community/global. Safe to call
+  /// repeatedly. Unlike house sync, this has no id parameter — there's only
+  /// ever one global doc.
+  void startGlobalSync() {
+    if (_globalSyncing && _globalSub != null) return;
+    _globalSub?.cancel();
+    _globalSyncing = true;
+    _globalSub = FirebaseFirestore.instance.collection('community').doc('global').snapshots().listen(
+      (snap) {
+        if (snap.metadata.hasPendingWrites) return;
+        final data = snap.data();
+        if (data == null) return;
+        _applyingRemoteGlobal = true;
+        try {
+          _applyGlobalFieldsFromJson(data);
+          notifyListeners();
+          _persist();
+          _maybeAutoJoinFromAcceptedInterest();
+        } finally {
+          _applyingRemoteGlobal = false;
+        }
+      },
+      onError: (Object e) {
+        if (kDebugMode) {
+          // ignore: avoid_print
+          print('Global sync error: $e');
+        }
+      },
+    );
+  }
+
+  void stopGlobalSync() {
+    _globalSub?.cancel();
+    _globalSub = null;
+    _globalSyncing = false;
+  }
+
+  void stopHouseSync() {
+    _houseSub?.cancel();
+    _houseSub = null;
+    _syncedHouseId = null;
+  }
+
+  String _hid() => 'h-${Random().nextInt(0xFFFFFF).toRadixString(36)}';
+
+  /// Creates a new house doc seeded from the CURRENT local state (so any
+  /// existing local/demo data becomes the house's starting content — nothing
+  /// is discarded), makes the current user its first member, and starts
+  /// syncing to it.
+  Future<String> createHouse() async {
+    final cu = currentUser;
+    if (cu == null) throw StateError('createHouse() requires a signed-in user');
+    final id = _hid();
+    await FirebaseFirestore.instance.collection('houses').doc(id).set({
+      ..._sharedFieldsJson(),
+      'members': [cu.id],
+      'createdBy': cu.id,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'updatedBy': cu.id,
+    });
+    await FirebaseFirestore.instance.collection('users').doc(cu.id).update({'houseId': id});
+    mutate(() {
+      currentUser?.houseId = id;
+    });
+    startHouseSync(id);
+    return id;
+  }
+
+  /// Creates an invite: always added to local state (unchanged shape/format),
+  /// and — once a house exists — also written to Firestore so the code can
+  /// be redeemed on a different device. Returns the created Invite so callers
+  /// (e.g. to build a shareable message) don't need to re-derive the code.
+  Future<Invite> createInvite({required String email, String? phone, required String role}) async {
+    final code = 'HMI-${Random().nextInt(0xFFFF).toRadixString(16).toUpperCase().padLeft(4, '0')}';
+    final invite = Invite(code: code, email: email, phone: phone, role: role, sentAt: todayIso());
+    mutate(() => invites.add(invite));
+    final id = houseId;
+    if (id != null) {
+      await FirebaseFirestore.instance.collection('invites').doc(code).set({
+        'code': code,
+        'houseId': id,
+        'email': email,
+        'phone': phone,
+        'role': role,
+        'status': 'sent',
+        'createdBy': currentUser?.id,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+    return invite;
+  }
+
+  /// Fetches invites/{code} to learn its houseId, then joins the current
+  /// user to that house: sets users/{uid}.houseId, adds the uid to
+  /// houses/{houseId}.members, and marks the invite accepted. Shared by
+  /// explicit invite redemption (signup.dart) and the auto-join check below
+  /// for accepted marketplace applications.
+  Future<void> joinHouseByCode(String code) async {
+    final cu = currentUser;
+    if (cu == null) return;
+    final snap = await FirebaseFirestore.instance.collection('invites').doc(code).get();
+    final id = snap.data()?['houseId'] as String?;
+    if (id == null) return;
+    await FirebaseFirestore.instance.collection('users').doc(cu.id).update({'houseId': id});
+    await FirebaseFirestore.instance.collection('houses').doc(id).update({
+      'members': FieldValue.arrayUnion([cu.id]),
+    });
+    await FirebaseFirestore.instance.collection('invites').doc(code).update({'status': 'accepted'});
+    mutate(() {
+      for (final i in invites) {
+        if (i.code == code) i.status = 'accepted';
+      }
+      currentUser?.houseId = id;
+    });
+    startHouseSync(id);
+  }
+
+  /// If the current user has an accepted marketplace application with an
+  /// invite attached, and doesn't have a house yet, join automatically — no
+  /// manual "tap to join" needed once a leaseholder accepts their
+  /// application. Safe to call repeatedly; a no-op once houseId is set.
+  void _maybeAutoJoinFromAcceptedInterest() {
+    final cu = currentUser;
+    if (cu == null || cu.houseId != null) return;
+    final accepted = listingInterests.firstWhereOrNull(
+        (i) => i.from == cu.id && i.status == 'accepted' && i.inviteCode != null);
+    if (accepted == null) return;
+    joinHouseByCode(accepted.inviteCode!).catchError((Object e) {
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print('Auto-join from accepted interest failed: $e');
+      }
+    });
   }
 
   void mutate(void Function() block) {
@@ -362,6 +656,10 @@ class HomiesState extends ChangeNotifier {
   }
 
   void reset() {
+    // Resetting to seed/demo data must never propagate to a live house or
+    // community doc.
+    stopHouseSync();
+    stopGlobalSync();
     session = Session();
     property = SeedData.property();
     users = SeedData.users();
@@ -534,6 +832,10 @@ class HomiesState extends ChangeNotifier {
   /// demo user exists in state (in case persisted data replaced the seed),
   /// then activates their session — no email/password / Firebase required.
   void signInAs(User user) {
+    // Demo accounts are always local-only — stop syncing if a real signed-in
+    // house/community session was active in this same app session.
+    stopHouseSync();
+    stopGlobalSync();
     mutate(() {
       if (users.firstWhereOrNull((u) => u.id == user.id) == null) {
         users.add(user);
@@ -605,6 +907,8 @@ class HomiesState extends ChangeNotifier {
   @override
   void dispose() {
     _authSub?.cancel();
+    _houseSub?.cancel();
+    _globalSub?.cancel();
     super.dispose();
   }
 }

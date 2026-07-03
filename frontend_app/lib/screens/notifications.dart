@@ -109,6 +109,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             value: prefs.parties,
             onChanged: (v) => toggle((p) => p.parties, (p, v) => p.parties = v),
           ),
+          _ToggleCard(
+            icon: Icons.event_repeat_outlined,
+            iconColor: HomiesColors.accent,
+            label: 'Recurring service reminders',
+            description: 'When a repeating Essentials booking is due again.',
+            value: prefs.essentialServices,
+            onChanged: (v) => toggle((p) => p.essentialServices, (p, v) => p.essentialServices = v),
+          ),
 
           const SizedBox(height: 20),
 

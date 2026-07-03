@@ -4,6 +4,7 @@ import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../state/app_state.dart';
+import '../util/format.dart' show FirstWhereOrNull;
 
 class NotificationService {
   NotificationService._();
@@ -20,6 +21,7 @@ class NotificationService {
   static const _billBase = 2000;
   static const _choreBase = 3000;
   static const _partyBase = 4000;
+  static const _essentialBase = 5000;
 
   static Future<void> init() async {
     try {
@@ -69,6 +71,7 @@ class NotificationService {
       if (prefs.bills) await _scheduleBills(state, cu.id, prefs.hour);
       if (prefs.chores) await _scheduleChores(state, cu.id, prefs.hour);
       if (prefs.parties) await _scheduleParties(state, prefs.hour);
+      if (prefs.essentialServices) await _scheduleEssentials(state, cu.id, prefs.hour);
     } catch (_) {
       // Silent — scheduling errors must not affect app usage
     }
@@ -165,6 +168,52 @@ class NotificationService {
       );
     }
   }
+
+  // ─── Essentials (recurring service bookings) ───────────────────────────────
+
+  static Future<void> _scheduleEssentials(HomiesState state, String userId, int hour) async {
+    final myRecurring = state.essentialBookings
+        .where((b) => b.requestedBy == userId && b.status == 'confirmed' && b.frequency != null)
+        .toList();
+    var idOffset = 0;
+    for (final booking in myRecurring) {
+      if (idOffset >= 60) break; // cap total scheduled essentials reminders
+      final apptDate = DateTime.tryParse(booking.date);
+      if (apptDate == null) continue;
+      final listing = state.essentials.firstWhereOrNull((e) => e.id == booking.listingId);
+      if (listing == null) continue;
+
+      // The reminder is for the NEXT occurrence after this appointment, not
+      // the appointment itself — start the cadence search one period ahead.
+      final firstReminder = _addCadence(apptDate, booking.frequency!);
+      final occurrences = _upcomingPeriods(firstReminder, booking.frequency!, 3);
+      for (final date in occurrences) {
+        final periodKey = _isoDate(date);
+        // Skip if the client has already booked again for this occurrence or later.
+        final alreadyRebooked = state.essentialBookings.any((other) =>
+            other.id != booking.id &&
+            other.listingId == booking.listingId &&
+            other.requestedBy == userId &&
+            other.status != 'declined' &&
+            other.status != 'cancelled' &&
+            other.date.compareTo(periodKey) >= 0);
+        if (alreadyRebooked) continue;
+        await _scheduleAt(
+          _essentialBase + idOffset,
+          'Time to rebook — ${listing.businessName}',
+          'Your ${_frequencyWord(booking.frequency!)} appointment is due again.',
+          _atHour(date, hour),
+        );
+        idOffset++;
+      }
+    }
+  }
+
+  static String _frequencyWord(String frequency) => switch (frequency) {
+        'weekly' => 'weekly',
+        'fortnightly' => 'fortnightly',
+        _ => 'monthly',
+      };
 
   // ─── Parties ────────────────────────────────────────────────────────────────
 

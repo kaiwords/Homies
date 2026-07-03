@@ -1,3 +1,6 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -6,6 +9,17 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// Release signing comes from android/key.properties, which is git-ignored and
+// never committed. See android/key.properties.example for the expected shape.
+// Falls back to debug signing when the file is absent (e.g. a fresh checkout)
+// so `flutter run --release` still works without the release keystore.
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+val hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
@@ -33,11 +47,25 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                logger.warn("WARNING: android/key.properties not found — release build is signed with the DEBUG keystore. This build must not be uploaded to Google Play.")
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

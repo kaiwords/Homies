@@ -109,8 +109,34 @@ class DashboardScreen extends StatelessWidget {
           PageHead(
             title: 'Good day, $firstName 👋',
             subtitle: "Here's what's up at home.",
-            action: AvatarStack(users: active),
+            action: GestureDetector(
+              onTap: () => context.go('/app/messages'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: HomiesColors.accentSoft,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.chat_bubble_outline, size: 15, color: HomiesColors.accent),
+                  SizedBox(width: 5),
+                  Text('Chat', style: TextStyle(fontSize: 13, color: HomiesColors.accentStrong, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            ),
           ),
+
+          if (active.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Row(children: [
+              AvatarStack(users: active),
+              const SizedBox(width: 10),
+              Text(
+                '${active.length} home now',
+                style: const TextStyle(fontSize: 12, color: HomiesColors.textDim, fontWeight: FontWeight.w500),
+              ),
+            ]),
+          ],
 
           // Lease expiry banners
           if (daysLeft != null && daysLeft <= 14 && daysLeft >= 0)

@@ -1,14 +1,15 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 
 import '../state/models.dart';
 import '../theme.dart';
 import '../util/format.dart';
 import '../util/media.dart';
+import 'media_viewer.dart';
 
 /// Inline photo bubble — a rounded thumbnail that opens a pinch-to-zoom viewer.
 class ChatImageBubble extends StatelessWidget {
@@ -27,7 +28,11 @@ class ChatImageBubble extends StatelessWidget {
       GestureDetector(
         onTap: () => Navigator.of(context).push(MaterialPageRoute(
           fullscreenDialog: true,
-          builder: (_) => _ImageViewer(bytes: bytes),
+          builder: (_) => FullscreenImageViewer(
+            bytes: bytes,
+            fileName: media.fileName,
+            mimeType: media.type,
+          ),
         )),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
@@ -46,25 +51,6 @@ class ChatImageBubble extends StatelessWidget {
   }
 }
 
-class _ImageViewer extends StatelessWidget {
-  final Uint8List bytes;
-  const _ImageViewer({required this.bytes});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white, elevation: 0),
-      body: Center(
-        child: InteractiveViewer(
-          minScale: 0.5,
-          maxScale: 5,
-          child: Image.memory(bytes),
-        ),
-      ),
-    );
-  }
-}
 
 /// Video bubble — a dark card with a play badge and duration. Tapping opens a
 /// fullscreen player.
@@ -160,6 +146,21 @@ class _VideoViewerState extends State<_VideoViewer> {
     }
   }
 
+  Future<void> _download(BuildContext context) async {
+    try {
+      final ext = (widget.media.type ?? '').contains('quicktime') ? 'mov' : 'mp4';
+      final file = await attachmentToTempFile(widget.media, ext: ext);
+      if (file == null) return;
+      await Share.shareXFiles([XFile(file.path, mimeType: widget.media.type ?? 'video/mp4')]);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not save video.')),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     _controller?.dispose();
@@ -171,22 +172,115 @@ class _VideoViewerState extends State<_VideoViewer> {
     final c = _controller;
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white, elevation: 0),
-      body: Center(
-        child: _error != null
-            ? Text(_error!, style: const TextStyle(color: Colors.white70))
-            : c == null
-                ? const CircularProgressIndicator()
-                : AspectRatio(aspectRatio: c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio, child: VideoPlayer(c)),
-      ),
-      floatingActionButton: c == null
-          ? null
-          : FloatingActionButton(
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.black,
-              onPressed: () => setState(() => c.value.isPlaying ? c.pause() : c.play()),
-              child: Icon(c.value.isPlaying ? Icons.pause : Icons.play_arrow),
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          if (c != null)
+            IconButton(
+              icon: const Icon(Icons.download_rounded),
+              tooltip: 'Save video',
+              onPressed: () => _download(context),
             ),
+        ],
+      ),
+      body: _error != null
+          ? Center(child: Text(_error!, style: const TextStyle(color: Colors.white70)))
+          : c == null
+              ? const Center(child: CircularProgressIndicator(color: Colors.white54))
+              : Stack(fit: StackFit.expand, children: [
+                  GestureDetector(
+                    onTap: () => setState(() => c.value.isPlaying ? c.pause() : c.play()),
+                    child: Center(
+                      child: AspectRatio(
+                        aspectRatio: c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio,
+                        child: VideoPlayer(c),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: _VideoControls(controller: c),
+                  ),
+                ]),
+    );
+  }
+}
+
+class _VideoControls extends StatefulWidget {
+  final VideoPlayerController controller;
+  const _VideoControls({required this.controller});
+
+  @override
+  State<_VideoControls> createState() => _VideoControlsState();
+}
+
+class _VideoControlsState extends State<_VideoControls> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onTick);
+  }
+
+  void _onTick() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onTick);
+    super.dispose();
+  }
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.controller;
+    final v = c.value;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [Colors.black87, Colors.transparent],
+        ),
+      ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        VideoProgressIndicator(
+          c,
+          allowScrubbing: true,
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          colors: const VideoProgressColors(
+            playedColor: Colors.white,
+            bufferedColor: Colors.white38,
+            backgroundColor: Colors.white12,
+          ),
+        ),
+        Row(children: [
+          InkWell(
+            onTap: () => v.isPlaying ? c.pause() : c.play(),
+            child: Icon(
+              v.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              color: Colors.white,
+              size: 26,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            '${_fmt(v.position)} / ${_fmt(v.duration)}',
+            style: const TextStyle(color: Colors.white, fontSize: 12),
+          ),
+        ]),
+      ]),
     );
   }
 }

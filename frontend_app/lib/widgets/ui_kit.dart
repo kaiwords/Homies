@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../state/models.dart';
 import '../theme.dart';
+import 'media_viewer.dart';
 
 // ─── HomiesCard ───────────────────────────────────────────────────────────────
 
@@ -481,10 +482,14 @@ class AttachmentTile extends StatelessWidget {
       child: Row(children: [
         if (isImage)
           GestureDetector(
-            onTap: () => showDialog(
-              context: context,
-              builder: (_) => Dialog(child: InteractiveViewer(child: Image.memory(bytes))),
-            ),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              fullscreenDialog: true,
+              builder: (_) => FullscreenImageViewer(
+                bytes: bytes,
+                fileName: value.fileName,
+                mimeType: value.type,
+              ),
+            )),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: Image.memory(bytes, width: size, height: size, fit: BoxFit.cover),
