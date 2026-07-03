@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 
 import '../state/app_state.dart';
@@ -10,20 +8,44 @@ import '../widgets/avatar.dart';
 import '../widgets/ui_kit.dart';
 
 /// Unified admin console — lease verifications + user management on one page.
-class AdminVerificationsScreen extends StatelessWidget {
+/// Both sections read from [HomiesState.adminAllUsers], a live query over
+/// every real account (not the house-scoped `state.users`, which for an
+/// admin — who has no house — would only ever contain their own record).
+class AdminVerificationsScreen extends StatefulWidget {
   const AdminVerificationsScreen({super.key});
+
+  @override
+  State<AdminVerificationsScreen> createState() => _AdminVerificationsScreenState();
+}
+
+class _AdminVerificationsScreenState extends State<AdminVerificationsScreen> {
+  bool _syncStarted = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_syncStarted) return;
+    _syncStarted = true;
+    HomiesScope.of(context).startAdminUsersSync();
+  }
+
+  @override
+  void dispose() {
+    HomiesScope.of(context).stopAdminUsersSync();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = HomiesScope.of(context);
-    final leaseholders = state.leaseholders;
+    final leaseholders = state.adminAllUsers.where((u) => u.role == 'leaseholder').toList();
     final pending = leaseholders.where((u) => u.leaseStatus == 'pending').toList();
     final reviewed = leaseholders.where((u) => u.leaseStatus == 'verified' || u.leaseStatus == 'rejected').toList();
     final notSubmitted = leaseholders.where((u) => u.leaseStatus == 'none').toList();
 
-    final admins = state.users.where((u) => u.role == 'admin').toList();
-    final leaseholderUsers = state.users.where((u) => u.role == 'leaseholder').toList();
-    final tenants = state.users.where((u) => u.role == 'tenant').toList();
+    final admins = state.adminAllUsers.where((u) => u.role == 'admin').toList();
+    final leaseholderUsers = leaseholders;
+    final tenants = state.adminAllUsers.where((u) => u.role == 'tenant').toList();
 
     return SafeArea(
       child: ListView(
@@ -98,11 +120,47 @@ class AdminVerificationsScreen extends StatelessWidget {
     final nameCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
+    final passwordCtrl = TextEditingController();
     String role = 'tenant';
+    String? error;
+    bool submitting = false;
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
+        Future<void> submit() async {
+          final name = nameCtrl.text.trim();
+          final email = emailCtrl.text.trim();
+          final password = passwordCtrl.text;
+          if (name.isEmpty || email.isEmpty) {
+            setSheet(() => error = 'Name and email are required.');
+            return;
+          }
+          if (password.length < 6) {
+            setSheet(() => error = 'Password must be at least 6 characters.');
+            return;
+          }
+          setSheet(() {
+            submitting = true;
+            error = null;
+          });
+          final result = await state.adminCreateUser(
+            name: name,
+            email: email,
+            password: password,
+            phone: phoneCtrl.text.trim(),
+            role: role,
+          );
+          if (!result.ok) {
+            setSheet(() {
+              submitting = false;
+              error = result.error;
+            });
+            return;
+          }
+          if (ctx.mounted) Navigator.pop(ctx);
+        }
+
         return SafeArea(
           top: false,
           child: Padding(
@@ -119,6 +177,10 @@ class AdminVerificationsScreen extends StatelessWidget {
               const FieldLabel('Phone'),
               TextField(controller: phoneCtrl, keyboardType: TextInputType.phone, decoration: const InputDecoration(hintText: '0400 000 000')),
               const SizedBox(height: 10),
+              const FieldLabel('Password'),
+              TextField(controller: passwordCtrl, obscureText: true, decoration: const InputDecoration(hintText: 'At least 6 characters')),
+              const Hint("This is a real login — share it with the person you're adding."),
+              const SizedBox(height: 10),
               const FieldLabel('Role'),
               Segment<String>(
                 options: const ['tenant', 'leaseholder', 'admin'],
@@ -126,29 +188,19 @@ class AdminVerificationsScreen extends StatelessWidget {
                 labelFor: (v) => v[0].toUpperCase() + v.substring(1),
                 onChanged: (v) => setSheet(() => role = v),
               ),
+              if (error != null) ...[
+                const SizedBox(height: 10),
+                Text(error!, style: const TextStyle(color: HomiesColors.danger, fontSize: 12)),
+              ],
               const SizedBox(height: 16),
               Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                TextButton(onPressed: submitting ? null : () => Navigator.pop(ctx), child: const Text('Cancel')),
                 const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: () {
-                    final name = nameCtrl.text.trim();
-                    if (name.isEmpty) return;
-                    final parts = name.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-                    final initials = parts.take(2).map((p) => p[0]).join().toUpperCase();
-                    state.adminAddUser(User(
-                      id: 'u-${Random().nextInt(0x7FFFFFFF).toRadixString(36)}',
-                      name: name,
-                      initials: initials.isEmpty ? '?' : initials,
-                      role: role,
-                      email: emailCtrl.text.trim(),
-                      phone: phoneCtrl.text.trim(),
-                      member: role != 'admin',
-                      pending: role == 'tenant',
-                    ));
-                    Navigator.pop(ctx);
-                  },
-                  child: const Text('Add user'),
+                  onPressed: submitting ? null : submit,
+                  child: submitting
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Add user'),
                 ),
               ]),
             ]),
@@ -255,9 +307,11 @@ class _VerificationCard extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: () {
-                  state.reviewLeaseVerification(user.id, 'verified');
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${user.name} verified ✓')));
+                onPressed: () async {
+                  await state.reviewLeaseVerification(user.id, 'verified');
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${user.name} verified ✓')));
+                  }
                 },
                 icon: const Icon(Icons.check, size: 18),
                 label: const Text('Verify'),
@@ -301,7 +355,7 @@ class _VerificationCard extends StatelessWidget {
       ),
     );
     if (ok == true) {
-      state.reviewLeaseVerification(user.id, 'rejected', note: ctrl.text.trim().isEmpty ? null : ctrl.text.trim());
+      await state.reviewLeaseVerification(user.id, 'rejected', note: ctrl.text.trim().isEmpty ? null : ctrl.text.trim());
     }
   }
 
@@ -390,7 +444,7 @@ class _AdminUserRow extends StatelessWidget {
         ]),
       ),
     );
-    if (picked != null && picked != user.role && context.mounted) state.adminSetRole(user.id, picked);
+    if (picked != null && picked != user.role) await state.adminSetRole(user.id, picked);
   }
 
   Future<void> _confirmDelete(BuildContext context, HomiesState state) async {
@@ -398,7 +452,10 @@ class _AdminUserRow extends StatelessWidget {
       context: context,
       builder: (_) => AlertDialog(
         title: Text('Delete ${user.name}?'),
-        content: const Text('This permanently removes the account.'),
+        content: const Text(
+          'Removes their profile from Homies. Their login stays active — if they sign back in '
+          "they'll get a fresh, unverified account.",
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           ElevatedButton(
@@ -409,7 +466,14 @@ class _AdminUserRow extends StatelessWidget {
         ],
       ),
     );
-    if (ok == true) state.adminDeleteUser(user.id);
+    if (ok == true) {
+      final result = await state.adminDeleteUser(user.id);
+      if (!result.ok && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.error ?? 'Failed to delete user.')),
+        );
+      }
+    }
   }
 }
 

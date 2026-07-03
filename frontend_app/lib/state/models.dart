@@ -401,6 +401,37 @@ class User {
         leaseholderName: j['leaseholderName'] as String?,
         houseId: j['houseId'] as String?,
       );
+
+  /// Builds a User from a `users/{uid}` Firestore doc, where the id lives in
+  /// the doc's key rather than as a field — unlike [fromJson], every field
+  /// falls back to a safe default instead of throwing, since a Firestore doc
+  /// may be missing fields an older/partial write didn't set.
+  factory User.fromFirestoreDoc(String id, Map<String, dynamic> data) => User(
+        id: id,
+        name: (data['name'] as String?) ?? '',
+        initials: (data['initials'] as String?) ?? _initialsFor((data['name'] as String?) ?? ''),
+        role: (data['role'] as String?) ?? 'tenant',
+        email: (data['email'] as String?) ?? '',
+        phone: (data['phone'] as String?) ?? '',
+        moveInDate: data['moveInDate'] as String?,
+        moveOutDate: data['moveOutDate'] as String?,
+        bondPaid: (data['bondPaid'] as bool?) ?? false,
+        bondAmount: ((data['bondAmount'] as num?) ?? 0).toDouble(),
+        docVerified: (data['docVerified'] as bool?) ?? false,
+        advanceRentPaid: (data['advanceRentPaid'] as bool?) ?? false,
+        acceptedRulesAt: data['acceptedRulesAt'] as String?,
+        pending: (data['pending'] as bool?) ?? true,
+        member: (data['member'] as bool?) ?? true,
+        shareEmergency: (data['shareEmergency'] as bool?) ?? false,
+        houseId: data['houseId'] as String?,
+        leaseVerification: LeaseVerification.fromJson(data['leaseVerification'] as Map<String, dynamic>?),
+      );
+}
+
+String _initialsFor(String name) {
+  final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+  if (parts.isEmpty) return '??';
+  return parts.take(2).map((p) => p[0]).join().toUpperCase();
 }
 
 class Property {

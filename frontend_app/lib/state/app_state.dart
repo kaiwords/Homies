@@ -4,10 +4,13 @@ import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../util/admin_api.dart';
 import '../util/format.dart';
 import 'models.dart';
 import 'seed.dart';
@@ -75,6 +78,11 @@ class HomiesState extends ChangeNotifier {
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _globalSub;
   bool _globalSyncing = false;
   bool _applyingRemoteGlobal = false;
+
+  // Every real account, admin-only (authorized by the isAdmin() Firestore
+  // rule) — session-only, not part of the persisted local-storage blob.
+  List<User> adminAllUsers = [];
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _adminUsersSub;
 
   User? get currentUser {
     final id = session.userId;
@@ -276,25 +284,8 @@ class HomiesState extends ChangeNotifier {
         startGlobalSync(); // even a pending/incomplete signup should see the marketplace
         return;
       }
-      final remote = User(
-        id: fbUser.uid,
-        name: (data['name'] as String?) ?? '',
-        initials: (data['initials'] as String?) ?? _initialsFor((data['name'] as String?) ?? ''),
-        role: (data['role'] as String?) ?? 'tenant',
-        email: (data['email'] as String?) ?? fbUser.email ?? '',
-        phone: (data['phone'] as String?) ?? '',
-        moveInDate: data['moveInDate'] as String?,
-        moveOutDate: data['moveOutDate'] as String?,
-        bondPaid: (data['bondPaid'] as bool?) ?? false,
-        bondAmount: ((data['bondAmount'] as num?) ?? 0).toDouble(),
-        docVerified: (data['docVerified'] as bool?) ?? false,
-        advanceRentPaid: (data['advanceRentPaid'] as bool?) ?? false,
-        acceptedRulesAt: data['acceptedRulesAt'] as String?,
-        pending: (data['pending'] as bool?) ?? true,
-        member: (data['member'] as bool?) ?? true,
-        shareEmergency: (data['shareEmergency'] as bool?) ?? false,
-        houseId: data['houseId'] as String?,
-      );
+      final remote = User.fromFirestoreDoc(fbUser.uid, data);
+      if (remote.email.isEmpty && fbUser.email != null) remote.email = fbUser.email!;
       mutate(() {
         final idx = users.indexWhere((u) => u.id == fbUser.uid);
         if (idx >= 0) {
@@ -873,35 +864,123 @@ class HomiesState extends ChangeNotifier {
     });
   }
 
-  /// Admin decision: status is 'verified' or 'rejected'.
-  void reviewLeaseVerification(String userId, String status, {String? note}) {
-    final u = users.firstWhereOrNull((x) => x.id == userId);
+  /// Admin decision: status is 'verified' or 'rejected'. Writes straight to
+  /// the leaseholder's `users/{userId}` Firestore doc — an admin reviewing a
+  /// real leaseholder's submission isn't a house member of theirs, so there's
+  /// no local record of them to mutate the old (house-scoped) way.
+  Future<void> reviewLeaseVerification(String userId, String status, {String? note}) async {
+    final u = adminAllUsers.firstWhereOrNull((x) => x.id == userId);
     final v = u?.leaseVerification;
     if (v == null) return;
-    mutate(() {
-      v.status = status;
-      v.note = note;
-      v.reviewedAt = DateTime.now().toIso8601String();
+    v.status = status;
+    v.note = note;
+    v.reviewedAt = DateTime.now().toIso8601String();
+    await FirebaseFirestore.instance.collection('users').doc(userId).update({
+      'leaseVerification': v.toJson(),
     });
   }
 
-  // --- Admin user management ------------------------------------------------
+  // --- Admin: real, platform-wide user management (web-only console) --------
 
-  void adminDeleteUser(String id) {
-    if (id == currentUser?.id) return; // never delete yourself
-    mutate(() => users.removeWhere((u) => u.id == id));
+  /// Live query over every real account — only an admin's session can
+  /// actually read this (see the `isAdmin()` Firestore rule).
+  void startAdminUsersSync() {
+    if (_adminUsersSub != null) return;
+    _adminUsersSub = FirebaseFirestore.instance.collection('users').snapshots().listen(
+      (snap) {
+        adminAllUsers = snap.docs.map((d) => User.fromFirestoreDoc(d.id, d.data())).toList();
+        notifyListeners();
+      },
+      onError: (Object e) {
+        if (kDebugMode) {
+          // ignore: avoid_print
+          print('Admin users sync error: $e');
+        }
+      },
+    );
   }
 
-  void adminAddUser(User user) {
-    mutate(() {
-      if (users.firstWhereOrNull((u) => u.id == user.id) == null) users.add(user);
-    });
+  void stopAdminUsersSync() {
+    _adminUsersSub?.cancel();
+    _adminUsersSub = null;
   }
 
-  void adminSetRole(String id, String role) {
-    final u = users.firstWhereOrNull((x) => x.id == id);
-    if (u == null) return;
-    mutate(() => u.role = role);
+  /// Creates a real Firebase Auth account + `users/{uid}` doc for someone an
+  /// admin is adding directly (including granting the admin role itself).
+  /// Auth creation runs on a throwaway secondary [FirebaseApp] so it doesn't
+  /// sign the calling admin out of their own session (creating a user always
+  /// signs the client in as that new user on whatever app instance does it).
+  /// The Firestore doc is then written from the *primary* app — i.e. still
+  /// authenticated as the admin — so the `isAdmin()` rule branch authorizes
+  /// writing a doc whose id isn't the caller's own uid.
+  Future<AuthResult> adminCreateUser({
+    required String name,
+    required String email,
+    required String password,
+    String phone = '',
+    required String role,
+  }) async {
+    FirebaseApp? secondary;
+    try {
+      secondary = await Firebase.initializeApp(
+        name: 'admin-create-${DateTime.now().microsecondsSinceEpoch}',
+        options: Firebase.app().options,
+      );
+      final cred = await fb.FirebaseAuth.instanceFor(app: secondary).createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      final uid = cred.user!.uid;
+      final displayName = name.trim().isEmpty ? 'New user' : name.trim();
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'name': displayName,
+        'initials': _initialsFor(displayName),
+        'role': role,
+        'email': email.trim(),
+        'phone': phone.trim(),
+        'pending': role == 'tenant',
+        'member': role != 'admin',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      return const AuthResult.success();
+    } on fb.FirebaseAuthException catch (e) {
+      return AuthResult.failure(_authErrorMessage(e));
+    } catch (e) {
+      return AuthResult.failure('Failed to create account: $e');
+    } finally {
+      await secondary?.delete();
+    }
+  }
+
+  Future<void> adminSetRole(String id, String role) async {
+    await FirebaseFirestore.instance.collection('users').doc(id).update({'role': role});
+  }
+
+  /// Fully deletes a user — Auth login and Firestore profile both — via the
+  /// small admin-api backend (`backend/admin-api`), since only the Admin SDK
+  /// (server-side) can remove another user's Auth login; the client SDK
+  /// can't do this directly, no matter how it's signed in.
+  Future<AuthResult> adminDeleteUser(String id) async {
+    if (id == currentUser?.id) return const AuthResult.failure("Can't delete yourself.");
+    final token = await fb.FirebaseAuth.instance.currentUser?.getIdToken();
+    if (token == null) return const AuthResult.failure('Not signed in.');
+    try {
+      final res = await http.delete(
+        Uri.parse('$adminApiBaseUrl/users/$id'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (res.statusCode != 200) {
+        String message = 'Failed to delete (${res.statusCode}).';
+        try {
+          final body = jsonDecode(res.body) as Map<String, dynamic>;
+          message = (body['error'] as String?) ?? message;
+        } catch (_) {/* non-JSON error body — use the generic message */}
+        return AuthResult.failure(message);
+      }
+      return const AuthResult.success();
+    } catch (e) {
+      return AuthResult.failure('Failed to reach admin service: $e');
+    }
   }
 
   @override

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -19,6 +20,38 @@ class AdminShell extends StatelessWidget {
     final user = state.currentUser;
     if (user == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    // The admin console is data-table/desktop-oriented and admin accounts
+    // aren't house members, so there's no sensible mobile screen to fall
+    // back to — show a plain message instead of the console on native apps.
+    if (!kIsWeb) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Homies console')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.desktop_windows_outlined, size: 40, color: HomiesColors.textFaint),
+              const SizedBox(height: 16),
+              const Text('Desktop only', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: HomiesColors.text)),
+              const SizedBox(height: 8),
+              const Text(
+                'The admin console is only available on the web. Please sign in from a desktop browser.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: HomiesColors.textDim),
+              ),
+              const SizedBox(height: 20),
+              OutlinedButton(
+                onPressed: () async {
+                  await state.signOut();
+                  if (context.mounted) context.go('/login');
+                },
+                child: const Text('Sign out'),
+              ),
+            ]),
+          ),
+        ),
+      );
     }
 
     return Scaffold(
