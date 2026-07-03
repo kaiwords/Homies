@@ -23,7 +23,7 @@ if (hasReleaseKeystore) {
 }
 
 android {
-    namespace = "au.com.creyeti.homies_mobile"
+    namespace = "com.kai.poems"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -38,7 +38,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "au.com.creyeti.homies_mobile"
+        applicationId = "com.kai.poems"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

@@ -1,4 +1,4 @@
-package au.com.creyeti.homies_mobile
+package com.kai.poems
 
 import io.flutter.embedding.android.FlutterActivity
 
