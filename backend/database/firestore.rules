@@ -5,9 +5,27 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // A signed-in user may read and write only their own profile document.
+    function isAdmin() {
+      return request.auth != null &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // A signed-in user may read/create/update their own profile document, but
+    // may never change their own `role` (this is what stops a plain user
+    // from self-granting admin via a raw Firestore write, bypassing the
+    // app's UI entirely). Admins may read, list, create, update, or delete
+    // any user's document — this is how the admin console manages accounts
+    // and creates other admins.
     match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow get: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if request.auth != null && (
+        (request.auth.uid == uid && request.resource.data.role in ['tenant', 'leaseholder']) || isAdmin()
+      );
+      allow update: if request.auth != null && (
+        (request.auth.uid == uid && request.resource.data.role == resource.data.role) || isAdmin()
+      );
+      allow delete: if isAdmin();
     }
 
     // A house's shared data doc. Members can read/write freely. A

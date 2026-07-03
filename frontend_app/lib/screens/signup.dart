@@ -9,9 +9,10 @@ import 'browser_profile_prompt.dart';
 class InviteHandoff {
   final String code;
   final String email;
+  final String? phone;
   final String role;
   final String houseId;
-  const InviteHandoff({required this.code, required this.email, required this.role, required this.houseId});
+  const InviteHandoff({required this.code, required this.email, this.phone, required this.role, required this.houseId});
 }
 
 class SignupScreen extends StatefulWidget {
@@ -38,6 +39,7 @@ class _SignupScreenState extends State<SignupScreen> {
       _step = 'details';
       _role = widget.invite!.role;
       _emailCtrl.text = widget.invite!.email;
+      _phoneCtrl.text = widget.invite!.phone ?? '';
     } else {
       _step = 'role';
     }
@@ -204,10 +206,10 @@ class _SignupScreenState extends State<SignupScreen> {
       TextField(
         controller: _emailCtrl,
         keyboardType: TextInputType.emailAddress,
-        readOnly: invite != null,
+        readOnly: invite != null && invite.email.isNotEmpty,
         decoration: const InputDecoration(hintText: 'you@example.com'),
       ),
-      if (invite != null) const Hint('Use the email the invite was sent to.'),
+      if (invite != null && invite.email.isNotEmpty) const Hint('Use the email the invite was sent to.'),
       const SizedBox(height: 12),
       const FieldLabel('Mobile number (optional)'),
       TextField(

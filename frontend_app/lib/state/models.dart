@@ -530,22 +530,40 @@ class Property {
       );
 }
 
+/// How the leaseholder chose to reach the invitee — determines which single
+/// contact field was collected and which "send" action is offered once the
+/// code is generated.
 class Invite {
   String code;
-  String email;
+  String? email;
   String? phone;
+  String method; // 'email' | 'phone' | 'social'
   String role;
   String sentAt;
   String status;
 
-  Invite({required this.code, required this.email, this.phone, required this.role, required this.sentAt, this.status = 'sent'});
+  Invite({
+    required this.code,
+    this.email,
+    this.phone,
+    this.method = 'email',
+    required this.role,
+    required this.sentAt,
+    this.status = 'sent',
+  });
 
   Map<String, dynamic> toJson() =>
-      {'code': code, 'email': email, 'phone': phone, 'role': role, 'sentAt': sentAt, 'status': status};
+      {'code': code, 'email': email, 'phone': phone, 'method': method, 'role': role, 'sentAt': sentAt, 'status': status};
   factory Invite.fromJson(Map<String, dynamic> j) => Invite(
         code: j['code'] as String,
-        email: j['email'] as String,
+        email: j['email'] as String?,
         phone: j['phone'] as String?,
+        // Older invites predate the `method` field — infer it from whichever
+        // contact field they happen to have.
+        method: (j['method'] as String?) ??
+            (((j['email'] as String?)?.isNotEmpty ?? false)
+                ? 'email'
+                : (((j['phone'] as String?)?.isNotEmpty ?? false) ? 'phone' : 'social')),
         role: j['role'] as String,
         sentAt: j['sentAt'] as String,
         status: (j['status'] ?? 'sent') as String,

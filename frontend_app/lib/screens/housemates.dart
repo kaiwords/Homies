@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -22,9 +23,11 @@ String inviteShareText(Invite invite) =>
 /// (to/subject/body) so they can review and hit send themselves — no backend
 /// email-sending infrastructure required.
 Future<void> _sendInviteEmail(Invite invite) async {
+  final email = invite.email;
+  if (email == null || email.isEmpty) return;
   final uri = Uri(
     scheme: 'mailto',
-    path: invite.email,
+    path: email,
     queryParameters: {
       'subject': "You're invited to join our house on Homies",
       'body': inviteShareText(invite),
@@ -45,42 +48,76 @@ Future<void> _sendInviteSms(Invite invite) async {
   if (await canLaunchUrl(uri)) await launchUrl(uri);
 }
 
-/// After creating an invite, let the leaseholder pick how to send it: open
-/// their email or texting app pre-filled, or the general OS share sheet.
-void _showSendOptions(BuildContext context, Invite invite) {
+/// Final step of the invite flow: show the generated code front-and-centre
+/// (tap to copy) plus a single send action matching whichever contact method
+/// the leaseholder chose up front — email, phone, or the OS share sheet for
+/// social/anything else.
+void _showInviteCode(BuildContext context, Invite invite) {
   showModalBottomSheet(
     context: context,
-    builder: (_) => SafeArea(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        ListTile(
-          leading: const Icon(Icons.email_outlined),
-          title: const Text('Open in email app'),
-          subtitle: Text('Pre-filled to ${invite.email}'),
-          onTap: () {
-            Navigator.pop(context);
-            _sendInviteEmail(invite);
-          },
-        ),
-        if (invite.phone != null && invite.phone!.isNotEmpty)
-          ListTile(
-            leading: const Icon(Icons.sms_outlined),
-            title: const Text('Text invite'),
-            subtitle: Text('Pre-filled to ${invite.phone}'),
-            onTap: () {
-              Navigator.pop(context);
-              _sendInviteSms(invite);
+    builder: (ctx) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Text('Invite created', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          const Text("Here's their code — it's good until they use it.",
+              style: TextStyle(color: HomiesColors.textDim, fontSize: 12)),
+          const SizedBox(height: 16),
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () async {
+              await Clipboard.setData(ClipboardData(text: invite.code));
+              if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Code copied')));
             },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              decoration: BoxDecoration(
+                color: HomiesColors.surface2,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: HomiesColors.border),
+              ),
+              child: Column(children: [
+                Text(invite.code,
+                    style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700, fontFamily: 'monospace', letterSpacing: 1.5)),
+                const SizedBox(height: 4),
+                const Text('Tap to copy', style: TextStyle(fontSize: 11, color: HomiesColors.textDim)),
+              ]),
+            ),
           ),
-        ListTile(
-          leading: const Icon(Icons.share_outlined),
-          title: const Text('Share via…'),
-          subtitle: const Text('Text, WhatsApp, or anything else'),
-          onTap: () {
-            Navigator.pop(context);
-            Share.share(inviteShareText(invite));
-          },
-        ),
-      ]),
+          const SizedBox(height: 20),
+          if (invite.method == 'email')
+            ElevatedButton.icon(
+              icon: const Icon(Icons.email_outlined),
+              label: Text('Open in email app · ${invite.email}'),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _sendInviteEmail(invite);
+              },
+            )
+          else if (invite.method == 'phone')
+            ElevatedButton.icon(
+              icon: const Icon(Icons.sms_outlined),
+              label: Text('Text invite · ${invite.phone}'),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _sendInviteSms(invite);
+              },
+            )
+          else
+            ElevatedButton.icon(
+              icon: const Icon(Icons.share_outlined),
+              label: const Text('Share via…'),
+              onPressed: () {
+                Navigator.pop(ctx);
+                Share.share(inviteShareText(invite));
+              },
+            ),
+          const SizedBox(height: 8),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
+        ]),
+      ),
     ),
   );
 }
@@ -130,35 +167,37 @@ class _HousematesScreenState extends State<HousematesScreen> {
                     child: Row(children: [
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(i.email, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          Text(i.email ?? i.phone ?? 'Invite code ${i.code}', style: const TextStyle(fontWeight: FontWeight.w600)),
                           Text(
-                            [
-                              i.role,
-                              'code ${i.code}',
-                              if (i.phone != null && i.phone!.isNotEmpty) i.phone!,
-                              'sent ${fmtDate(i.sentAt)}',
-                            ].join(' · '),
+                            [i.role, 'code ${i.code}', 'sent ${fmtDate(i.sentAt)}'].join(' · '),
                             style: const TextStyle(color: HomiesColors.textDim, fontSize: 12),
                           ),
                         ]),
                       ),
                       if (i.status == 'sent') ...[
                         IconButton(
-                          tooltip: 'Open in email app',
-                          icon: const Icon(Icons.email_outlined, size: 18, color: HomiesColors.textDim),
-                          onPressed: () => _sendInviteEmail(i),
+                          tooltip: 'View code',
+                          icon: const Icon(Icons.pin_outlined, size: 18, color: HomiesColors.textDim),
+                          onPressed: () => _showInviteCode(context, i),
                         ),
-                        if (i.phone != null && i.phone!.isNotEmpty)
+                        if (i.method == 'email')
+                          IconButton(
+                            tooltip: 'Open in email app',
+                            icon: const Icon(Icons.email_outlined, size: 18, color: HomiesColors.textDim),
+                            onPressed: () => _sendInviteEmail(i),
+                          )
+                        else if (i.method == 'phone')
                           IconButton(
                             tooltip: 'Text invite',
                             icon: const Icon(Icons.sms_outlined, size: 18, color: HomiesColors.textDim),
                             onPressed: () => _sendInviteSms(i),
+                          )
+                        else
+                          IconButton(
+                            tooltip: 'Share invite link',
+                            icon: const Icon(Icons.share_outlined, size: 18, color: HomiesColors.textDim),
+                            onPressed: () => Share.share(inviteShareText(i)),
                           ),
-                        IconButton(
-                          tooltip: 'Share invite link',
-                          icon: const Icon(Icons.share_outlined, size: 18, color: HomiesColors.textDim),
-                          onPressed: () => Share.share(inviteShareText(i)),
-                        ),
                       ],
                     ]),
                   ),
@@ -170,8 +209,8 @@ class _HousematesScreenState extends State<HousematesScreen> {
   }
 
   void _showInvite(BuildContext context, HomiesState state) {
-    final emailCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
+    final contactCtrl = TextEditingController();
+    String method = 'email';
     String role = 'tenant';
     showModalBottomSheet(
       context: context,
@@ -182,15 +221,37 @@ class _HousematesScreenState extends State<HousematesScreen> {
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             const Text('Invite a housemate', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             const SizedBox(height: 20),
-            const FieldLabel('Email'),
-            TextField(controller: emailCtrl, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(hintText: 'housemate@example.com')),
-            const SizedBox(height: 16),
-            const FieldLabel('Mobile number (optional)'),
-            TextField(
-              controller: phoneCtrl,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(hintText: '+61 4XX XXX XXX'),
+            const FieldLabel('How do you want to reach them?'),
+            const SizedBox(height: 8),
+            Segment<String>(
+              options: const ['email', 'phone', 'social'],
+              value: method,
+              labelFor: (v) => switch (v) { 'email' => 'Email', 'phone' => 'Phone', _ => 'Social' },
+              onChanged: (v) => setSheet(() {
+                method = v;
+                contactCtrl.clear();
+              }),
             ),
+            const SizedBox(height: 16),
+            if (method == 'email') ...[
+              const FieldLabel('Email'),
+              TextField(
+                controller: contactCtrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(hintText: 'housemate@example.com'),
+              ),
+            ] else if (method == 'phone') ...[
+              const FieldLabel('Mobile number'),
+              TextField(
+                controller: contactCtrl,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(hintText: '+61 4XX XXX XXX'),
+              ),
+            ] else
+              const Text(
+                "You'll get a code and link to post wherever you like — WhatsApp, Instagram, anywhere.",
+                style: TextStyle(color: HomiesColors.textDim, fontSize: 12),
+              ),
             const SizedBox(height: 16),
             const FieldLabel('Role'),
             Segment<String>(
@@ -205,18 +266,18 @@ class _HousematesScreenState extends State<HousematesScreen> {
               const SizedBox(width: 8),
               ElevatedButton(
                 onPressed: () async {
-                  final email = emailCtrl.text.trim();
-                  if (email.isEmpty) return;
-                  final phone = phoneCtrl.text.trim();
+                  final contact = contactCtrl.text.trim();
+                  if (method != 'social' && contact.isEmpty) return;
                   final invite = await state.createInvite(
-                    email: email,
-                    phone: phone.isEmpty ? null : phone,
+                    email: method == 'email' ? contact : null,
+                    phone: method == 'phone' ? contact : null,
+                    method: method,
                     role: role,
                   );
                   if (ctx.mounted) Navigator.pop(ctx);
-                  if (context.mounted) _showSendOptions(context, invite);
+                  if (context.mounted) _showInviteCode(context, invite);
                 },
-                child: const Text('Send invite'),
+                child: const Text('Create invite'),
               ),
             ]),
           ]),

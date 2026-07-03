@@ -577,9 +577,9 @@ class HomiesState extends ChangeNotifier {
   /// and — once a house exists — also written to Firestore so the code can
   /// be redeemed on a different device. Returns the created Invite so callers
   /// (e.g. to build a shareable message) don't need to re-derive the code.
-  Future<Invite> createInvite({required String email, String? phone, required String role}) async {
+  Future<Invite> createInvite({String? email, String? phone, String method = 'email', required String role}) async {
     final code = 'HMI-${Random().nextInt(0xFFFF).toRadixString(16).toUpperCase().padLeft(4, '0')}';
-    final invite = Invite(code: code, email: email, phone: phone, role: role, sentAt: todayIso());
+    final invite = Invite(code: code, email: email, phone: phone, method: method, role: role, sentAt: todayIso());
     mutate(() => invites.add(invite));
     final id = houseId;
     if (id != null) {
@@ -588,6 +588,7 @@ class HomiesState extends ChangeNotifier {
         'houseId': id,
         'email': email,
         'phone': phone,
+        'method': method,
         'role': role,
         'status': 'sent',
         'createdBy': currentUser?.id,

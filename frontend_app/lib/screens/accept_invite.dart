@@ -49,6 +49,7 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
                         );
                       }
                       final email = (data['email'] as String?) ?? '';
+                      final phone = (data['phone'] as String?) ?? '';
                       final role = (data['role'] as String?) ?? 'tenant';
                       final houseId = data['houseId'] as String?;
                       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -62,11 +63,13 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
                               const Text('Invite code', style: TextStyle(color: HomiesColors.textDim, fontSize: 12)),
                               Text(widget.code, style: const TextStyle(fontFamily: 'monospace')),
                             ]),
-                            const SizedBox(height: 6),
-                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                              const Text('Sent to', style: TextStyle(color: HomiesColors.textDim, fontSize: 12)),
-                              Text(email),
-                            ]),
+                            if (email.isNotEmpty || phone.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                                const Text('Sent to', style: TextStyle(color: HomiesColors.textDim, fontSize: 12)),
+                                Text(email.isNotEmpty ? email : phone),
+                              ]),
+                            ],
                           ]),
                         ),
                         const SizedBox(height: 12),
@@ -75,7 +78,13 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
                               ? null
                               : () => context.push(
                                     '/signup',
-                                    extra: InviteHandoff(code: widget.code, email: email, role: role, houseId: houseId),
+                                    extra: InviteHandoff(
+                                      code: widget.code,
+                                      email: email,
+                                      phone: phone.isEmpty ? null : phone,
+                                      role: role,
+                                      houseId: houseId,
+                                    ),
                                   ),
                           child: const Text('Accept & create account'),
                         ),
