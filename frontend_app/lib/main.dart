@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -14,13 +16,18 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  await NotificationService.init();
   Intl.defaultLocale = 'en_AU';
   await initializeDateFormatting('en_AU', null);
   final state = HomiesState();
   await state.load();
-  await NotificationService.scheduleFromState(state);
   runApp(HomiesApp(state: state));
+
+  // NotificationService.init() triggers the native "Allow Notifications?"
+  // permission prompt and awaits its result — that await can hang forever on
+  // a real device if it's requested before the app's UI exists, permanently
+  // blocking the first frame. Run it after runApp() instead, so a stalled
+  // permission prompt can never stop the app from rendering.
+  unawaited(NotificationService.init().then((_) => NotificationService.scheduleFromState(state)));
 }
 
 class HomiesApp extends StatefulWidget {
