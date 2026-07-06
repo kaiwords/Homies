@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
@@ -13,13 +14,37 @@ import 'theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+
+  // Firebase.initializeApp() and state.load() can both fail or stall on a
+  // real device (e.g. Firebase Installations needs a network round-trip on
+  // first launch; a slow/absent connection makes this hang instead of
+  // erroring). Either one throwing or hanging here — same as the
+  // notification-permission prompt did — permanently blocks runApp() with a
+  // black screen and no crash log. Bound each with a timeout and swallow
+  // failures so a broken backend never stops the UI from rendering; screens
+  // that need Firebase will simply show as signed-out.
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    ).timeout(const Duration(seconds: 15));
+  } catch (e) {
+    if (kDebugMode) {
+      // ignore: avoid_print
+      print('Firebase.initializeApp failed or timed out: $e');
+    }
+  }
+
   Intl.defaultLocale = 'en_AU';
   await initializeDateFormatting('en_AU', null);
   final state = HomiesState();
-  await state.load();
+  try {
+    await state.load().timeout(const Duration(seconds: 10));
+  } catch (e) {
+    if (kDebugMode) {
+      // ignore: avoid_print
+      print('state.load() failed or timed out: $e');
+    }
+  }
   runApp(HomiesApp(state: state));
 
   // NotificationService.init() triggers the native "Allow Notifications?"
