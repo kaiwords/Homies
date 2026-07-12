@@ -1,8 +1,0 @@
-{
-  "private": true,
-  "scripts": {
-    "install": "cd frontend_web && npm install",
-    "build": "cd frontend_web && npm run build",
-    "start": "cd frontend_web && npm run preview -- --host 0.0.0.0 --port $PORT"
-  }
-}

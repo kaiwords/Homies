@@ -30,7 +30,10 @@ class DefaultFirebaseOptions {
           'you can reconfigure this by running the FlutterFire CLI again.',
         );
       case TargetPlatform.windows:
-        return windows;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for windows - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -44,39 +47,28 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyB1GvJX4pEekU9f8cNLKXVfrRsJjMhUKlE',
-    appId: '1:579052656220:web:aeb7db0d4332218b307899',
-    messagingSenderId: '579052656220',
-    projectId: 'homies-980c7',
-    authDomain: 'homies-980c7.firebaseapp.com',
-    storageBucket: 'homies-980c7.firebasestorage.app',
-    measurementId: 'G-0WZPLJW4ZB',
+    apiKey: 'AIzaSyDGmicnf0KWs8qy_G8CzNmKgYHiDoasTBs',
+    appId: '1:451958522457:web:ba8e24b47124aff03ce748',
+    messagingSenderId: '451958522457',
+    projectId: 'leasely-a11e4',
+    authDomain: 'leasely-a11e4.firebaseapp.com',
+    storageBucket: 'leasely-a11e4.firebasestorage.app',
+    measurementId: 'G-6PDFE6QT4X',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDlkFHMhK3zSeYlutpEr_UDEfiYcCTtXhU',
-    appId: '1:579052656220:android:c39c7bed528ae79e307899',
-    messagingSenderId: '579052656220',
-    projectId: 'homies-980c7',
-    storageBucket: 'homies-980c7.firebasestorage.app',
+    apiKey: 'AIzaSyBhPDiNVG3U2mmpN-BvEkhtAxvx7eyTV-8',
+    appId: '1:451958522457:android:fe1aceca00b74a453ce748',
+    messagingSenderId: '451958522457',
+    projectId: 'leasely-a11e4',
+    storageBucket: 'leasely-a11e4.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyA8z2vz3GeyPst9varMX1QmtOeFNeu-vCM',
-    appId: '1:579052656220:ios:9887f57009c9b4f9307899',
-    messagingSenderId: '579052656220',
-    projectId: 'homies-980c7',
-    storageBucket: 'homies-980c7.firebasestorage.app',
-    iosBundleId: 'au.com.creyeti.homiesMobile',
-  );
-
-  static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyB1GvJX4pEekU9f8cNLKXVfrRsJjMhUKlE',
-    appId: '1:579052656220:web:a18cf6eb2bed6b95307899',
-    messagingSenderId: '579052656220',
-    projectId: 'homies-980c7',
-    authDomain: 'homies-980c7.firebaseapp.com',
-    storageBucket: 'homies-980c7.firebasestorage.app',
-    measurementId: 'G-KQFHRQJRY3',
+    apiKey: 'AIzaSyA6ZxrelXUnYmhSStd9hUaBTK83MnYAI2U',
+    appId: '1:451958522457:ios:2d6298059f9a9df53ce748',
+    messagingSenderId: '451958522457',
+    projectId: 'leasely-a11e4',
+    storageBucket: 'leasely-a11e4.firebasestorage.app',
+    iosBundleId: 'com.kai.poems',
   );
 }

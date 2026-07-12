@@ -1,32 +1,13 @@
 {
   "project_info": {
-    "project_number": "579052656220",
-    "project_id": "homies-980c7",
-    "storage_bucket": "homies-980c7.firebasestorage.app"
+    "project_number": "451958522457",
+    "project_id": "leasely-a11e4",
+    "storage_bucket": "leasely-a11e4.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:579052656220:android:c39c7bed528ae79e307899",
-        "android_client_info": {
-          "package_name": "au.com.creyeti.homies_mobile"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyDlkFHMhK3zSeYlutpEr_UDEfiYcCTtXhU"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:579052656220:android:b434b0f06732dfcc307899",
+        "mobilesdk_app_id": "1:451958522457:android:fe1aceca00b74a453ce748",
         "android_client_info": {
           "package_name": "com.kai.poems"
         }
@@ -34,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDlkFHMhK3zSeYlutpEr_UDEfiYcCTtXhU"
+          "current_key": "AIzaSyBhPDiNVG3U2mmpN-BvEkhtAxvx7eyTV-8"
         }
       ],
       "services": {

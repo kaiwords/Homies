@@ -14,15 +14,34 @@ import 'theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  Intl.defaultLocale = 'en_AU';
+  await initializeDateFormatting('en_AU', null);
 
-  // Firebase.initializeApp() and state.load() can both fail or stall on a
-  // real device (e.g. Firebase Installations needs a network round-trip on
-  // first launch; a slow/absent connection makes this hang instead of
-  // erroring). Either one throwing or hanging here — same as the
-  // notification-permission prompt did — permanently blocks runApp() with a
-  // black screen and no crash log. Bound each with a timeout and swallow
-  // failures so a broken backend never stops the UI from rendering; screens
-  // that need Firebase will simply show as signed-out.
+  // iOS kills the app if it takes too long between launch and the first
+  // rendered frame (the launch watchdog) — a real-device-only limit that a
+  // debug/emulator run never hits. Firebase.initializeApp() and state.load()
+  // can each stall for many seconds on a slow/absent connection, and awaiting
+  // them here before runApp() risks tripping that watchdog: the app never
+  // gets a chance to draw anything and iOS just kills it, indistinguishable
+  // from a permanent black screen with no crash log. Every HomiesState field
+  // has a safe default (seed data / empty lists), so call runApp()
+  // immediately and let Firebase/state loading finish in the background;
+  // state.load() and the Firebase auth listener both call notifyListeners()
+  // when data arrives, so the UI updates itself once ready.
+  final state = HomiesState();
+  runApp(HomiesApp(state: state));
+
+  unawaited(_initFirebaseAndLoadState(state));
+
+  // NotificationService.init() triggers the native "Allow Notifications?"
+  // permission prompt and awaits its result — that await can hang forever on
+  // a real device if it's requested before the app's UI exists, permanently
+  // blocking the first frame. Run it after runApp() instead, so a stalled
+  // permission prompt can never stop the app from rendering.
+  unawaited(NotificationService.init().then((_) => NotificationService.scheduleFromState(state)));
+}
+
+Future<void> _initFirebaseAndLoadState(HomiesState state) async {
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -34,9 +53,6 @@ void main() async {
     }
   }
 
-  Intl.defaultLocale = 'en_AU';
-  await initializeDateFormatting('en_AU', null);
-  final state = HomiesState();
   try {
     await state.load().timeout(const Duration(seconds: 10));
   } catch (e) {
@@ -45,14 +61,6 @@ void main() async {
       print('state.load() failed or timed out: $e');
     }
   }
-  runApp(HomiesApp(state: state));
-
-  // NotificationService.init() triggers the native "Allow Notifications?"
-  // permission prompt and awaits its result — that await can hang forever on
-  // a real device if it's requested before the app's UI exists, permanently
-  // blocking the first frame. Run it after runApp() instead, so a stalled
-  // permission prompt can never stop the app from rendering.
-  unawaited(NotificationService.init().then((_) => NotificationService.scheduleFromState(state)));
 }
 
 class HomiesApp extends StatefulWidget {
