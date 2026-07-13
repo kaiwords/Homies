@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "leasely-a11e4"
+  },
+  "targets": {
+    "leasely-a11e4": {
+      "storage": {
+        "rules": [
+          "leasely-a11e4.firebasestorage.app"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

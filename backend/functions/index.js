@@ -1,14 +1,12 @@
 const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
+const { onRequest } = require('firebase-functions/v2/https');
 
-const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
-if (!serviceAccountJson) {
-  throw new Error('FIREBASE_SERVICE_ACCOUNT env var is required (paste the full service-account JSON).');
-}
-admin.initializeApp({
-  credential: admin.credential.cert(JSON.parse(serviceAccountJson)),
-});
+// No credential is passed here (unlike the old Render service, which needed
+// FIREBASE_SERVICE_ACCOUNT) because Cloud Functions' runtime environment
+// already provides Application Default Credentials scoped to this project.
+admin.initializeApp();
 
 const app = express();
 app.use(cors());
@@ -59,5 +57,4 @@ app.delete('/users/:uid', requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
-const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`admin-api listening on ${port}`));
+exports.adminApi = onRequest(app);

@@ -1,0 +1,19 @@
+{
+  "name": "homies-admin-functions",
+  "description": "Firebase Cloud Functions (2nd gen) for admin-only operations that require the Firebase Admin SDK (e.g. fully deleting a user's Auth login), which the Flutter client can never do directly. Supersedes the Render-hosted backend/admin-api service.",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "lint": "true",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "firebase-admin": "^13.0.2",
+    "firebase-functions": "^6.3.1"
+  }
+}
