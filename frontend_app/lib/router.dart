@@ -1,10 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import 'state/app_state.dart';
 import 'screens/accept_invite.dart';
 import 'screens/admin_verifications.dart';
+import 'screens/business_dashboard.dart';
 import 'screens/finance.dart';
 import 'screens/bills.dart';
 import 'screens/cleaning.dart';
@@ -51,7 +53,12 @@ class _AuthRefreshNotifier extends ChangeNotifier {
     // Firebase auth state (real sign-in / sign-out).
     // Deferred to post-frame so we never call notifyListeners() while Flutter
     // is mid-build / mid-navigation, which causes the lifecycle assertion.
-    fb.FirebaseAuth.instance.authStateChanges().listen((_) => _notify());
+    //
+    // The router is built on the very first frame (see main.dart), before
+    // the background Firebase.initializeApp() call has necessarily finished,
+    // so FirebaseAuth.instance can throw core/no-app here. Wait for the
+    // default app to exist before subscribing.
+    _listenForAuthChanges();
 
     // Demo / local session changes — only fire when session.userId, role, or
     // member actually changes, not on every unrelated mutate().
@@ -69,6 +76,14 @@ class _AuthRefreshNotifier extends ChangeNotifier {
         _notify();
       }
     });
+  }
+
+  void _listenForAuthChanges() {
+    if (Firebase.apps.isEmpty) {
+      Future.delayed(const Duration(milliseconds: 200), _listenForAuthChanges);
+      return;
+    }
+    fb.FirebaseAuth.instance.authStateChanges().listen((_) => _notify());
   }
 
   bool _pending = false;
@@ -101,8 +116,17 @@ GoRouter buildRouter(HomiesState state) {
       if (!inApp) return null;
       // Not signed in — bounce protected routes to login.
       if (user == null) return '/login';
-      // Signed in but not invited into a house — marketplace only.
-      if (!user.member && loc != '/app/listings') return '/app/listings';
+      // Signed in but not invited into a house — restricted to a small set of
+      // pages. Business accounts have no house/lease features at all, so they
+      // get their own seller-focused pages instead of the room marketplace.
+      if (!user.member) {
+        final allowed = user.role == 'business'
+            ? const {'/app/essentials', '/app/marketplace', '/app/business'}
+            : const {'/app/listings'};
+        if (!allowed.contains(loc)) {
+          return user.role == 'business' ? '/app/essentials' : '/app/listings';
+        }
+      }
       return null;
     },
     routes: [
@@ -149,6 +173,7 @@ GoRouter buildRouter(HomiesState state) {
           GoRoute(path: '/app/terms', builder: (_, _) => const TermsScreen()),
           GoRoute(path: '/app/essentials', builder: (_, _) => const EssentialsScreen()),
           GoRoute(path: '/app/marketplace', builder: (_, _) => const GoodsMarketplaceScreen()),
+          GoRoute(path: '/app/business', builder: (_, _) => const BusinessDashboardScreen()),
         ],
       ),
       ShellRoute(

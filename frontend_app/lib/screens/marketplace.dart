@@ -8,6 +8,7 @@ import '../theme.dart';
 import '../util/media.dart';
 import '../widgets/category_prefs_sheet.dart';
 import '../widgets/ui_kit.dart';
+import 'goods_detail.dart';
 import 'marketplace_thread.dart';
 
 // ─── Category metadata ────────────────────────────────────────────────────────
@@ -282,12 +283,25 @@ class _GoodsMarketplaceScreenState extends State<GoodsMarketplaceScreen> {
                     itemBuilder: (context, i) {
                       final listing = shown[shown.length - 1 - i]; // newest first
                       final mine = listing.postedBy == user.id;
-                      return _GoodsCard(
+                      return _ViewTracked(
+                        key: ValueKey(listing.id),
                         listing: listing,
-                        mine: mine,
-                        onDelete: mine ? () => _delete(state, listing.id) : null,
-                        onToggleSold: mine ? () => _toggleSold(state, listing) : null,
-                        onChat: mine ? null : () => _openGoodsThread(context, listing, listing.postedBy),
+                        currentUserId: user.id,
+                        state: state,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => GoodsListingDetailScreen(listing: listing)),
+                          ),
+                          child: _GoodsCard(
+                            listing: listing,
+                            mine: mine,
+                            onDelete: mine ? () => _delete(state, listing.id) : null,
+                            onToggleSold: mine ? () => _toggleSold(state, listing) : null,
+                            onChat: mine ? null : () => _openGoodsThread(context, listing, listing.postedBy),
+                          ),
+                        ),
                       );
                     },
                   ),
@@ -685,6 +699,48 @@ class _PhotoThumb extends StatelessWidget {
       ],
     );
   }
+}
+
+// ─── View tracking ────────────────────────────────────────────────────────────
+
+/// Records a view for a non-owner exactly once per card mount, deferred to
+/// after the current frame (via addPostFrameCallback) so the mutate() /
+/// notifyListeners() it triggers never fires mid-build. Keyed by listing.id
+/// in the itemBuilder so filtering/re-sorting doesn't let Flutter reuse this
+/// State object for a different listing and skip the check.
+class _ViewTracked extends StatefulWidget {
+  final GoodsListing listing;
+  final String currentUserId;
+  final HomiesState state;
+  final Widget child;
+  const _ViewTracked({
+    super.key,
+    required this.listing,
+    required this.currentUserId,
+    required this.state,
+    required this.child,
+  });
+
+  @override
+  State<_ViewTracked> createState() => _ViewTrackedState();
+}
+
+class _ViewTrackedState extends State<_ViewTracked> {
+  @override
+  void initState() {
+    super.initState();
+    final listing = widget.listing;
+    final uid = widget.currentUserId;
+    if (listing.postedBy != uid && !listing.viewedBy.contains(uid)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        widget.state.mutate(() => listing.viewedBy.add(uid));
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 // ─── Listing card ─────────────────────────────────────────────────────────────

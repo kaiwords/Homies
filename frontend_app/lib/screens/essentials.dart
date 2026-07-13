@@ -11,6 +11,7 @@ import '../widgets/category_prefs_sheet.dart';
 import '../widgets/ui_kit.dart';
 import 'essential_booking.dart';
 import 'essential_bookings.dart';
+import 'essential_detail.dart';
 import 'essential_thread.dart';
 
 // ─── Category metadata ────────────────────────────────────────────────────────
@@ -290,19 +291,32 @@ class _EssentialsScreenState extends State<EssentialsScreen> {
                     separatorBuilder: (_, _) => const SizedBox(height: 10),
                     itemBuilder: (context, i) {
                       final listing = shown[shown.length - 1 - i]; // newest first
-                      return _ListingCard(
+                      return _ViewTracked(
+                        key: ValueKey(listing.id),
                         listing: listing,
                         currentUserId: user.id,
-                        onLike: () => _toggleLike(state, listing, user.id),
-                        onDelete: listing.postedBy == user.id
-                            ? () => _delete(state, listing.id)
-                            : null,
-                        onChat: listing.postedBy == user.id
-                            ? null
-                            : () => _openEssentialThread(context, listing, listing.postedBy),
-                        onBook: listing.postedBy == user.id
-                            ? null
-                            : () => _showBookingSheet(context, listing),
+                        state: state,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => EssentialListingDetailScreen(listing: listing)),
+                          ),
+                          child: _ListingCard(
+                            listing: listing,
+                            currentUserId: user.id,
+                            onLike: () => _toggleLike(state, listing, user.id),
+                            onDelete: listing.postedBy == user.id
+                                ? () => _delete(state, listing.id)
+                                : null,
+                            onChat: listing.postedBy == user.id
+                                ? null
+                                : () => _openEssentialThread(context, listing, listing.postedBy),
+                            onBook: listing.postedBy == user.id
+                                ? null
+                                : () => _showBookingSheet(context, listing),
+                          ),
+                        ),
                       );
                     },
                   ),
@@ -624,6 +638,48 @@ class _PostSheetState extends State<_PostSheet> {
       ),
     );
   }
+}
+
+// ─── View tracking ────────────────────────────────────────────────────────────
+
+/// Records a view for a non-owner exactly once per card mount, deferred to
+/// after the current frame (via addPostFrameCallback) so the mutate() /
+/// notifyListeners() it triggers never fires mid-build. Keyed by listing.id
+/// in the itemBuilder so filtering/re-sorting doesn't let Flutter reuse this
+/// State object for a different listing and skip the check.
+class _ViewTracked extends StatefulWidget {
+  final EssentialListing listing;
+  final String currentUserId;
+  final HomiesState state;
+  final Widget child;
+  const _ViewTracked({
+    super.key,
+    required this.listing,
+    required this.currentUserId,
+    required this.state,
+    required this.child,
+  });
+
+  @override
+  State<_ViewTracked> createState() => _ViewTrackedState();
+}
+
+class _ViewTrackedState extends State<_ViewTracked> {
+  @override
+  void initState() {
+    super.initState();
+    final listing = widget.listing;
+    final uid = widget.currentUserId;
+    if (listing.postedBy != uid && !listing.viewedBy.contains(uid)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        widget.state.mutate(() => listing.viewedBy.add(uid));
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 // ─── Listing card ─────────────────────────────────────────────────────────────

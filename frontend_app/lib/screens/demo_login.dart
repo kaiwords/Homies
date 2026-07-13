@@ -21,10 +21,11 @@ class DemoLoginScreen extends StatelessWidget {
     final admins = demoUsers.where((u) => u.role == 'admin').toList();
     final leaseholders = demoUsers.where((u) => u.role == 'leaseholder').toList();
     final tenants = demoUsers.where((u) => u.role == 'tenant').toList();
+    final businesses = demoUsers.where((u) => u.role == 'business').toList();
 
     void enter(User u) {
       state.signInAs(u);
-      context.go(u.role == 'admin' ? '/admin' : '/app');
+      context.go(u.role == 'admin' ? '/admin' : u.role == 'business' ? '/app/essentials' : '/app');
     }
 
     return Scaffold(
@@ -56,6 +57,12 @@ class DemoLoginScreen extends StatelessWidget {
                   const _GroupLabel('TENANTS'),
                   const SizedBox(height: 8),
                   for (final u in tenants) _DemoAccountTile(user: u, onTap: () => enter(u)),
+                  if (businesses.isNotEmpty) ...[
+                    const SizedBox(height: 18),
+                    const _GroupLabel('BUSINESSES'),
+                    const SizedBox(height: 8),
+                    for (final u in businesses) _DemoAccountTile(user: u, onTap: () => enter(u)),
+                  ],
                 ],
               ),
             ),
@@ -92,11 +99,13 @@ class _DemoAccountTile extends StatelessWidget {
     final roleLabel = switch (user.role) {
       'admin' => 'Admin',
       'leaseholder' => 'Leaseholder',
+      'business' => 'Business',
       _ => 'Tenant',
     };
     final roleTone = switch (user.role) {
       'admin' => ChipTone.neutral,
       'leaseholder' => ChipTone.accent,
+      'business' => ChipTone.warn,
       _ => ChipTone.info,
     };
     return Padding(

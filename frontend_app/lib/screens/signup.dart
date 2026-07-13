@@ -30,6 +30,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  final _businessNameCtrl = TextEditingController();
   bool _submitting = false;
 
   @override
@@ -51,6 +52,7 @@ class _SignupScreenState extends State<SignupScreen> {
     _emailCtrl.dispose();
     _phoneCtrl.dispose();
     _passCtrl.dispose();
+    _businessNameCtrl.dispose();
     super.dispose();
   }
 
@@ -67,10 +69,15 @@ class _SignupScreenState extends State<SignupScreen> {
       _showError('Password must be at least 6 characters.');
       return;
     }
+    if (_role == 'business' && _businessNameCtrl.text.trim().isEmpty) {
+      _showError('Business name is required.');
+      return;
+    }
 
     // A house member is a leaseholder (who sets up the property) or anyone who
     // signs up through a leaseholder's invite. A plain sign-up is a "browser"
-    // who can only see the marketplace until they're invited in.
+    // who can only see the marketplace until they're invited in. Business
+    // accounts are never members — they have no house features at all.
     final isMember = widget.invite != null || _role == 'leaseholder';
 
     setState(() => _submitting = true);
@@ -81,6 +88,7 @@ class _SignupScreenState extends State<SignupScreen> {
       role: _role ?? 'tenant',
       phone: _phoneCtrl.text.trim(),
       member: isMember,
+      businessName: _role == 'business' ? _businessNameCtrl.text.trim() : null,
     );
     if (!mounted) return;
     setState(() => _submitting = false);
@@ -103,6 +111,12 @@ class _SignupScreenState extends State<SignupScreen> {
       }
     }
     if (!mounted) return;
+    if (_role == 'business') {
+      // Business accounts skip the lifestyle/emergency prompt entirely — it's
+      // irrelevant for a seller-only account with no house features.
+      context.go('/app/essentials');
+      return;
+    }
     if (!isMember) {
       // Browsers skip house onboarding, but get a quick (skippable) prompt
       // to fill in their profile before landing in the marketplace — it's
@@ -162,9 +176,19 @@ class _SignupScreenState extends State<SignupScreen> {
       _RoleCard(
         icon: '🛋️',
         title: 'Looking for a room',
-        body: "Create an account to browse rooms and message leaseholders. You'll get full house access once a leaseholder invites you in.",
+        body: "Browse rooms and message leaseholders. You'll get full house access once a leaseholder invites you in.",
         onTap: () => setState(() {
           _role = 'tenant';
+          _step = 'details';
+        }),
+      ),
+      const SizedBox(height: 10),
+      _RoleCard(
+        icon: '🏪',
+        title: 'Business',
+        body: "I run a business and want to post services or items for sale. No house features here — just your listings and analytics.",
+        onTap: () => setState(() {
+          _role = 'business';
           _step = 'details';
         }),
       ),
@@ -176,15 +200,23 @@ class _SignupScreenState extends State<SignupScreen> {
 
   Widget _detailsView(HomiesState state) {
     final invite = widget.invite;
-    final isBrowser = invite == null && _role != 'leaseholder';
+    final isBusiness = _role == 'business';
+    final isBrowser = invite == null && _role == 'tenant';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text(isBrowser ? 'Create your account' : '${_role == 'leaseholder' ? 'Leaseholder' : 'Tenant'} signup',
+      Text(
+          isBusiness
+              ? 'Business signup'
+              : isBrowser
+                  ? 'Create your account'
+                  : '${_role == 'leaseholder' ? 'Leaseholder' : 'Tenant'} signup',
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
       const SizedBox(height: 6),
       Text(
-          isBrowser
-              ? 'Browse rooms and message leaseholders straight away. A leaseholder can invite you into their house anytime.'
-              : "Create your account. You'll add property and lease details next.",
+          isBusiness
+              ? "Set up your seller account to post services or items for sale — no house features here, just your listings and analytics."
+              : isBrowser
+                  ? 'Browse rooms and message leaseholders straight away. A leaseholder can invite you into their house anytime.'
+                  : "Create your account. You'll add property and lease details next.",
           style: const TextStyle(color: HomiesColors.textDim)),
       if (invite != null) ...[
         const SizedBox(height: 10),
@@ -199,6 +231,14 @@ class _SignupScreenState extends State<SignupScreen> {
         ),
       ],
       const SizedBox(height: 14),
+      if (isBusiness) ...[
+        const FieldLabel('Business name'),
+        TextField(
+          controller: _businessNameCtrl,
+          decoration: const InputDecoration(hintText: "e.g. Sam's Cleaning Co."),
+        ),
+        const SizedBox(height: 12),
+      ],
       const FieldLabel('Full name'),
       TextField(controller: _nameCtrl),
       const SizedBox(height: 12),

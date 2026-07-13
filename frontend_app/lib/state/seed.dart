@@ -187,6 +187,213 @@ class SeedData {
           advanceRentPaid: false,
           pending: true,
         ),
+        // Standalone seller account — no house features, just Essentials /
+        // Marketplace listings + analytics. Demonstrates the business signup
+        // path without needing to sign up for real.
+        User(
+          id: 'u6',
+          name: 'Sam Nguyen',
+          initials: 'SN',
+          role: 'business',
+          email: 'sam@marrickvilleclean.example.com',
+          phone: '0400 552 118',
+          member: false,
+          pending: false,
+          businessName: 'Marrickville Clean Co.',
+        ),
+      ];
+
+  // Essentials listings — the demo business account posts a couple of
+  // services, and (since posting isn't role-gated) a couple of housemates
+  // post their own side-hustles too. Pre-seeded with "views" (viewedBy) so
+  // analytics dashboards show non-zero numbers the moment you sign in.
+  static List<EssentialListing> essentials() => [
+        EssentialListing(
+          id: 'es-demo1',
+          postedBy: 'u6',
+          businessName: 'Marrickville Clean Co.',
+          category: 'cleaning',
+          description: 'End-of-lease and regular house cleans, servicing the Inner West.',
+          phone: '0400 552 118',
+          hours: 'Mon-Sat 8am-5pm',
+          postedAt: '2026-06-01T09:00:00.000',
+          viewedBy: ['u3', 'u4'],
+        ),
+        EssentialListing(
+          id: 'es-demo2',
+          postedBy: 'u6',
+          businessName: 'Marrickville Clean Co.',
+          category: 'removal',
+          description: 'Small-load removals and furniture pickup/drop-off — same team as our cleans.',
+          phone: '0400 552 118',
+          hours: 'Mon-Sat 8am-5pm',
+          postedAt: '2026-06-08T10:30:00.000',
+          viewedBy: ['u5'],
+        ),
+        EssentialListing(
+          id: 'es-demo3',
+          postedBy: 'u4',
+          businessName: 'Tom\'s Driving Lessons',
+          category: 'driving',
+          description: 'Patient, uni-student instructor — weekend lessons around the Inner West, own dual-control car.',
+          phone: '0438 145 770',
+          hours: 'Sat-Sun 9am-4pm',
+          postedAt: '2026-06-12T15:00:00.000',
+          viewedBy: ['u3', 'u5'],
+        ),
+        EssentialListing(
+          id: 'es-demo4',
+          postedBy: 'u3',
+          businessName: 'Priya\'s Tutoring',
+          category: 'other',
+          description: 'Science & maths tutoring, high school level. Evenings after my nursing shifts.',
+          phone: '0431 902 564',
+          postedAt: '2026-06-14T18:20:00.000',
+          viewedBy: ['u1'],
+        ),
+      ];
+
+  static List<GoodsListing> goodsListings() => [
+        GoodsListing(
+          id: 'gd-demo1',
+          postedBy: 'u6',
+          title: 'Commercial-grade vacuum cleaner',
+          description: 'Barely used, upgrading our equipment — great for a share house.',
+          price: 120,
+          category: 'appliances',
+          condition: 'like_new',
+          postedAt: '2026-06-05T09:00:00.000',
+          viewedBy: ['u3'],
+        ),
+        GoodsListing(
+          id: 'gd-demo2',
+          postedBy: 'u1',
+          title: 'IKEA desk + chair',
+          description: 'White IDÅSEN desk (120x70) and matching office chair, moving to a smaller room so no space for it anymore. Great condition.',
+          price: 90,
+          category: 'furniture',
+          condition: 'good',
+          location: 'Marrickville',
+          postedAt: '2026-06-09T12:00:00.000',
+          viewedBy: ['u4', 'u5'],
+        ),
+        GoodsListing(
+          id: 'gd-demo3',
+          postedBy: 'u4',
+          title: 'PS5 console + 2 controllers',
+          description: 'Disc edition, comes with 2 DualSense controllers and 3 games (FIFA 24, Spider-Man 2, Gran Turismo 7). Selling to fund next semester\'s textbooks.',
+          price: 480,
+          category: 'electronics',
+          condition: 'like_new',
+          location: 'Marrickville',
+          postedAt: '2026-06-11T19:45:00.000',
+          viewedBy: ['u2', 'u3'],
+        ),
+        GoodsListing(
+          id: 'gd-demo4',
+          postedBy: 'u3',
+          title: 'Nursing textbooks bundle (1st-2nd year)',
+          description: '6 core textbooks, some highlighting but all pages intact. Happy to bundle or split.',
+          price: 60,
+          category: 'books',
+          condition: 'fair',
+          location: 'Marrickville',
+          postedAt: '2026-06-13T08:15:00.000',
+          viewedBy: ['u5'],
+        ),
+        GoodsListing(
+          id: 'gd-demo5',
+          postedBy: 'u2',
+          title: 'Road bike — 56cm frame',
+          description: 'Giant Contend AR3, serviced 2 months ago, new tyres. Upgraded to a bigger frame so this one\'s got to go.',
+          price: 350,
+          category: 'sports',
+          condition: 'good',
+          location: 'Marrickville',
+          status: 'sold',
+          postedAt: '2026-05-20T07:30:00.000',
+          viewedBy: ['u1', 'u3', 'u4'],
+        ),
+      ];
+
+  // A couple of demo Essentials bookings, so essential_bookings.dart and the
+  // business dashboard's "your consumers" list aren't empty.
+  static List<EssentialBooking> essentialBookings() => [
+        EssentialBooking(
+          id: 'eb-demo1',
+          listingId: 'es-demo1',
+          requestedBy: 'u3', // Priya
+          businessOwnerId: 'u6', // Sam
+          date: '2026-06-20',
+          slot: '10:00 am',
+          note: 'Fortnightly clean, 4-bedroom house.',
+          status: 'confirmed',
+          createdAt: '2026-06-10T14:20:00.000',
+          updatedAt: '2026-06-10T16:00:00.000',
+          frequency: 'fortnightly',
+        ),
+        EssentialBooking(
+          id: 'eb-demo2',
+          listingId: 'es-demo3',
+          requestedBy: 'u5', // Aisha
+          businessOwnerId: 'u4', // Tom
+          date: '2026-06-21',
+          slot: '9:00 am',
+          note: 'First lesson — complete beginner.',
+          status: 'pending',
+          createdAt: '2026-06-15T09:00:00.000',
+          updatedAt: '2026-06-15T09:00:00.000',
+        ),
+      ];
+
+  // A few demo ratings on Marketplace/Essentials posts, both directions, so
+  // the review sections on goods_detail.dart/essential_detail.dart and the
+  // business dashboard show real stars instead of "No reviews yet."
+  static List<ListingReview> listingReviews() => [
+        ListingReview(
+          id: 'lr-demo1',
+          listingId: 'es-demo1',
+          targetUserId: 'u6',
+          targetUserName: 'Sam Nguyen',
+          fromUserId: 'u3',
+          fromUserName: 'Priya Sharma',
+          rating: 5,
+          body: 'Sam was fantastic — very thorough clean, right on time.',
+          date: '2026-06-21',
+        ),
+        ListingReview(
+          id: 'lr-demo2',
+          listingId: 'es-demo1',
+          targetUserId: 'u3',
+          targetUserName: 'Priya Sharma',
+          fromUserId: 'u6',
+          fromUserName: 'Sam Nguyen',
+          rating: 5,
+          body: 'Great client — responsive and the house was easy to work in.',
+          date: '2026-06-21',
+        ),
+        ListingReview(
+          id: 'lr-demo3',
+          listingId: 'gd-demo2',
+          targetUserId: 'u1',
+          targetUserName: 'Maya Chen',
+          fromUserId: 'u4',
+          fromUserName: 'Tom Becker',
+          rating: 4,
+          body: 'Desk was exactly as described, smooth pickup.',
+          date: '2026-06-10',
+        ),
+        ListingReview(
+          id: 'lr-demo4',
+          listingId: 'gd-demo5',
+          targetUserId: 'u2',
+          targetUserName: 'Daniel Okafor',
+          fromUserId: 'u1',
+          fromUserName: 'Maya Chen',
+          rating: 5,
+          body: 'Bike was in great nick, Daniel was super easy to deal with.',
+          date: '2026-05-22',
+        ),
       ];
 
   static List<Invite> invites() => [];
@@ -377,6 +584,168 @@ class SeedData {
   // Demo in-post conversations across all four listings — leaseholders,
   // tenants, and a newcomer, including performance requests and shares.
   static List<PostMessage> postMessages() => [
+        // ── es-demo1 (Marrickville Clean Co.) × Priya ────────────────────────
+        PostMessage(
+          id: 'pm-demo1',
+          listingId: 'es-demo1',
+          from: 'u3', // Priya
+          to: 'u6', // Sam (business)
+          text: 'Hi! Do you do fortnightly cleans for a 4-bedroom share house?',
+          at: '2026-06-10T14:00:00.000',
+        ),
+        PostMessage(
+          id: 'pm-demo1b',
+          listingId: 'es-demo1',
+          from: 'u6',
+          to: 'u3',
+          text: 'Hi Priya! Yes, fortnightly is our most common booking for a 4-bed. Sent you a booking request for the 20th at 10am 🙂',
+          at: '2026-06-10T14:20:00.000',
+        ),
+        // ── es-demo2 (Marrickville Clean Co. removals) × Aisha ───────────────
+        PostMessage(
+          id: 'pm-es2a',
+          listingId: 'es-demo2',
+          from: 'u5', // Aisha
+          to: 'u6',
+          text: 'Hey, do you handle single-item pickups? Just need a couch moved across suburbs.',
+          at: '2026-06-09T11:00:00.000',
+        ),
+        PostMessage(
+          id: 'pm-es2b',
+          listingId: 'es-demo2',
+          from: 'u6',
+          to: 'u5',
+          text: 'Yep, single items are fine! Flat callout fee plus \$40 for the move. Send me the two addresses whenever suits.',
+          at: '2026-06-09T11:35:00.000',
+        ),
+        // ── es-demo3 (Tom's driving lessons) × Priya ──────────────────────────
+        PostMessage(
+          id: 'pm-es3a',
+          listingId: 'es-demo3',
+          from: 'u3', // Priya
+          to: 'u4', // Tom
+          text: 'Hi Tom, are you taking new students at the moment? Never driven before, complete beginner 😅',
+          at: '2026-06-13T09:00:00.000',
+        ),
+        PostMessage(
+          id: 'pm-es3b',
+          listingId: 'es-demo3',
+          from: 'u4',
+          to: 'u3',
+          text: 'Always room for one more! Beginners are honestly my favourite — no bad habits to unlearn yet. Weekend slots work best for me.',
+          at: '2026-06-13T09:20:00.000',
+        ),
+        // ── es-demo3 (Tom's driving lessons) × Aisha (booking thread) ─────────
+        PostMessage(
+          id: 'pm-es3c',
+          listingId: 'es-demo3',
+          from: 'u5', // Aisha
+          to: 'u4',
+          text: 'Booked a lesson for the 21st — let me know if 9am works, thank you!',
+          at: '2026-06-15T09:00:00.000',
+        ),
+        PostMessage(
+          id: 'pm-es3d',
+          listingId: 'es-demo3',
+          from: 'u4',
+          to: 'u5',
+          text: 'Got it, just need to double check my calendar — will confirm tonight.',
+          at: '2026-06-15T09:10:00.000',
+        ),
+        // ── es-demo4 (Priya's tutoring) × Maya ────────────────────────────────
+        PostMessage(
+          id: 'pm-es4a',
+          listingId: 'es-demo4',
+          from: 'u1', // Maya
+          to: 'u3',
+          text: 'My cousin\'s struggling with year 11 chemistry — do you tutor high schoolers outside the inner west too?',
+          at: '2026-06-15T19:00:00.000',
+        ),
+        PostMessage(
+          id: 'pm-es4b',
+          listingId: 'es-demo4',
+          from: 'u3',
+          to: 'u1',
+          text: 'I can do online sessions for anyone outside the area! Happy to do a free 15-min intro call first.',
+          at: '2026-06-15T19:30:00.000',
+        ),
+        // ── gd-demo2 (Maya's desk) × Tom ───────────────────────────────────────
+        PostMessage(
+          id: 'pm-gd2a',
+          listingId: 'gd-demo2',
+          from: 'u4', // Tom
+          to: 'u1', // Maya
+          text: 'Is the desk still available? Would love to grab it this week if so.',
+          at: '2026-06-10T08:00:00.000',
+        ),
+        PostMessage(
+          id: 'pm-gd2b',
+          listingId: 'gd-demo2',
+          from: 'u1',
+          to: 'u4',
+          text: 'Yep still going! You\'re in the house already so pickup\'s easy — just grab it from my room whenever works 🙂',
+          at: '2026-06-10T08:15:00.000',
+        ),
+        // ── gd-demo3 (Tom's PS5) × Daniel ─────────────────────────────────────
+        PostMessage(
+          id: 'pm-gd3a',
+          listingId: 'gd-demo3',
+          from: 'u2', // Daniel
+          to: 'u4', // Tom
+          text: 'Interested in the PS5 — does the price include the games listed?',
+          at: '2026-06-12T20:00:00.000',
+        ),
+        PostMessage(
+          id: 'pm-gd3b',
+          listingId: 'gd-demo3',
+          from: 'u4',
+          to: 'u2',
+          text: 'Yep, all 3 games included. Can do \$460 if you can pick up this weekend.',
+          at: '2026-06-12T20:25:00.000',
+        ),
+        // ── gd-demo3 (Tom's PS5) × Aisha (also interested) ────────────────────
+        PostMessage(
+          id: 'pm-gd3c',
+          listingId: 'gd-demo3',
+          from: 'u5', // Aisha
+          to: 'u4',
+          text: 'Ah just saw someone\'s already asking — I\'ll keep an eye out if it falls through!',
+          at: '2026-06-13T10:00:00.000',
+        ),
+        // ── gd-demo4 (Priya's textbooks) × Aisha ───────────────────────────────
+        PostMessage(
+          id: 'pm-gd4a',
+          listingId: 'gd-demo4',
+          from: 'u5', // Aisha
+          to: 'u3', // Priya
+          text: 'Would you split the bundle? Only need the anatomy & pharmacology ones.',
+          at: '2026-06-14T12:00:00.000',
+        ),
+        PostMessage(
+          id: 'pm-gd4b',
+          listingId: 'gd-demo4',
+          from: 'u3',
+          to: 'u5',
+          text: 'Sure, \$25 for those two together works for me!',
+          at: '2026-06-14T12:40:00.000',
+        ),
+        // ── gd-demo5 (Daniel's bike, sold) × Maya ──────────────────────────────
+        PostMessage(
+          id: 'pm-gd5a',
+          listingId: 'gd-demo5',
+          from: 'u1', // Maya
+          to: 'u2', // Daniel
+          text: 'Still going? I\'ve been after a road bike for my commute.',
+          at: '2026-05-20T18:00:00.000',
+        ),
+        PostMessage(
+          id: 'pm-gd5b',
+          listingId: 'gd-demo5',
+          from: 'u2',
+          to: 'u1',
+          text: 'All yours — you\'re just downstairs so no need to even arrange pickup, ha. \$350 works?',
+          at: '2026-05-20T18:20:00.000',
+        ),
         // ── l1 (Maya's room) × Priya ────────────────────────────────────────
         PostMessage(
           id: 'pm1',

@@ -67,9 +67,10 @@ class HomiesState extends ChangeNotifier {
   List<ConditionCheck> conditionChecks = [];
   List<ApplianceBooking> applianceBookings = [];
   List<ParkingBooking> parkingBookings = [];
-  List<EssentialListing> essentials = [];
-  List<EssentialBooking> essentialBookings = [];
-  List<GoodsListing> goodsListings = [];
+  List<EssentialListing> essentials = SeedData.essentials();
+  List<EssentialBooking> essentialBookings = SeedData.essentialBookings();
+  List<GoodsListing> goodsListings = SeedData.goodsListings();
+  List<ListingReview> listingReviews = SeedData.listingReviews();
 
   StreamSubscription<fb.User?>? _authSub;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _houseSub;
@@ -173,10 +174,23 @@ class HomiesState extends ChangeNotifier {
     final loadedPMs = ((j['postMessages'] as List?) ?? []).map((e) => PostMessage.fromJson(e as Map<String, dynamic>)).toList();
     final pmIds = loadedPMs.map((m) => m.id).toSet();
     postMessages = [...loadedPMs, ...SeedData.postMessages().where((m) => !pmIds.contains(m.id))];
-    essentials = ((j['essentials'] as List?) ?? []).map((e) => EssentialListing.fromJson(e as Map<String, dynamic>)).toList();
-    essentialBookings = ((j['essentialBookings'] as List?) ?? []).map((e) => EssentialBooking.fromJson(e as Map<String, dynamic>)).toList();
+    // Essentials, goods, bookings, and reviews — same merge-with-seed
+    // treatment as listings/postMessages above, so newly added demo listings/
+    // chats/bookings/reviews always show up even on a device with older
+    // persisted state.
+    final loadedEssentials = ((j['essentials'] as List?) ?? []).map((e) => EssentialListing.fromJson(e as Map<String, dynamic>)).toList();
+    final essentialIds = loadedEssentials.map((e) => e.id).toSet();
+    essentials = [...loadedEssentials, ...SeedData.essentials().where((e) => !essentialIds.contains(e.id))];
+    final loadedBookings = ((j['essentialBookings'] as List?) ?? []).map((e) => EssentialBooking.fromJson(e as Map<String, dynamic>)).toList();
+    final bookingIds = loadedBookings.map((b) => b.id).toSet();
+    essentialBookings = [...loadedBookings, ...SeedData.essentialBookings().where((b) => !bookingIds.contains(b.id))];
     appNotifications = ((j['appNotifications'] as List?) ?? []).map((e) => AppNotification.fromJson(e as Map<String, dynamic>)).toList();
-    goodsListings = ((j['goodsListings'] as List?) ?? []).map((e) => GoodsListing.fromJson(e as Map<String, dynamic>)).toList();
+    final loadedGoods = ((j['goodsListings'] as List?) ?? []).map((e) => GoodsListing.fromJson(e as Map<String, dynamic>)).toList();
+    final goodsIds = loadedGoods.map((g) => g.id).toSet();
+    goodsListings = [...loadedGoods, ...SeedData.goodsListings().where((g) => !goodsIds.contains(g.id))];
+    final loadedReviews = ((j['listingReviews'] as List?) ?? []).map((e) => ListingReview.fromJson(e as Map<String, dynamic>)).toList();
+    final reviewIds = loadedReviews.map((r) => r.id).toSet();
+    listingReviews = [...loadedReviews, ...SeedData.listingReviews().where((r) => !reviewIds.contains(r.id))];
   }
 
   Map<String, dynamic> _globalFieldsJson() => {
@@ -188,6 +202,7 @@ class HomiesState extends ChangeNotifier {
         'essentialBookings': essentialBookings.map((b) => b.toJson()).toList(),
         'appNotifications': appNotifications.map((n) => n.toJson()).toList(),
         'goodsListings': goodsListings.map((g) => g.toJson()).toList(),
+        'listingReviews': listingReviews.map((r) => r.toJson()).toList(),
       };
 
   Map<String, dynamic> _sharedFieldsJson() => {
@@ -328,6 +343,7 @@ class HomiesState extends ChangeNotifier {
     required String role,
     String phone = '',
     bool member = false,
+    String? businessName,
   }) async {
     try {
       final cred = await fb.FirebaseAuth.instance.createUserWithEmailAndPassword(
@@ -337,6 +353,8 @@ class HomiesState extends ChangeNotifier {
       final uid = cred.user!.uid;
       final displayName = name.trim().isEmpty ? 'New user' : name.trim();
       final initials = _initialsFor(displayName);
+      final trimmedBusinessName = businessName?.trim();
+      final hasBusinessName = trimmedBusinessName != null && trimmedBusinessName.isNotEmpty;
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'name': displayName,
         'initials': initials,
@@ -346,6 +364,7 @@ class HomiesState extends ChangeNotifier {
         'pending': true,
         'member': member,
         'createdAt': FieldValue.serverTimestamp(),
+        if (hasBusinessName) 'businessName': trimmedBusinessName,
       });
       mutate(() {
         if (users.firstWhereOrNull((u) => u.id == uid) == null) {
@@ -358,6 +377,7 @@ class HomiesState extends ChangeNotifier {
             phone: phone.trim(),
             pending: true,
             member: member,
+            businessName: hasBusinessName ? trimmedBusinessName : null,
           ));
         }
         session = Session(userId: uid, pendingSignup: {'role': role});

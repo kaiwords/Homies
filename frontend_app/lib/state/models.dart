@@ -269,7 +269,7 @@ class User {
   String id;
   String name;
   String initials;
-  String role; // 'admin' | 'leaseholder' | 'tenant'
+  String role; // 'admin' | 'leaseholder' | 'tenant' | 'business'
   String email;
   String phone;
   String? moveInDate;
@@ -304,6 +304,9 @@ class User {
   // Firestore sync. Null for browsers, demo accounts, and pre-onboarding
   // leaseholders.
   String? houseId;
+  // Business-only: their seller display name, shown on Essentials/Marketplace
+  // listings. Null for every other role.
+  String? businessName;
 
   User({
     required this.id,
@@ -333,10 +336,12 @@ class User {
     this.leaseholderUserId,
     this.leaseholderName,
     this.houseId,
+    this.businessName,
   });
 
   bool get isAdmin => role == 'admin';
   bool get isLeaseholder => role == 'leaseholder';
+  bool get isBusiness => role == 'business';
   String get leaseStatus => leaseVerification?.status ?? 'none';
 
   /// Everyone must answer the lifestyle questions and add an emergency contact.
@@ -370,6 +375,7 @@ class User {
         'leaseholderUserId': leaseholderUserId,
         'leaseholderName': leaseholderName,
         'houseId': houseId,
+        'businessName': businessName,
       };
 
   factory User.fromJson(Map<String, dynamic> j) => User(
@@ -400,6 +406,7 @@ class User {
         leaseholderUserId: j['leaseholderUserId'] as String?,
         leaseholderName: j['leaseholderName'] as String?,
         houseId: j['houseId'] as String?,
+        businessName: j['businessName'] as String?,
       );
 
   /// Builds a User from a `users/{uid}` Firestore doc, where the id lives in
@@ -425,6 +432,7 @@ class User {
         shareEmergency: (data['shareEmergency'] as bool?) ?? false,
         houseId: data['houseId'] as String?,
         leaseVerification: LeaseVerification.fromJson(data['leaseVerification'] as Map<String, dynamic>?),
+        businessName: data['businessName'] as String?,
       );
 }
 
@@ -2068,6 +2076,64 @@ class LeaseholderReview {
       );
 }
 
+// A rating left on a Marketplace (GoodsListing) or Essentials (EssentialListing)
+// post, for either direction: a buyer/consumer rating the seller/business, or
+// the seller/business rating a specific buyer/consumer back. Mirrors
+// [LeaseholderReview]'s shape (1-5 stars + optional body + optional
+// anonymity) — [listingId] scopes it to the post the interaction happened on,
+// [targetUserId] is whoever is being reviewed.
+class ListingReview {
+  String id;
+  String listingId;
+  String targetUserId;
+  String targetUserName;
+  String fromUserId;
+  String fromUserName;
+  bool anonymous;
+  int rating; // 1–5
+  String body;
+  String date; // ISO date
+
+  ListingReview({
+    required this.id,
+    required this.listingId,
+    required this.targetUserId,
+    required this.targetUserName,
+    required this.fromUserId,
+    required this.fromUserName,
+    this.anonymous = false,
+    required this.rating,
+    required this.body,
+    required this.date,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'listingId': listingId,
+        'targetUserId': targetUserId,
+        'targetUserName': targetUserName,
+        'fromUserId': fromUserId,
+        'fromUserName': fromUserName,
+        'anonymous': anonymous,
+        'rating': rating,
+        'body': body,
+        'date': date,
+      };
+
+  factory ListingReview.fromJson(Map<String, dynamic> j) => ListingReview(
+        id: j['id'] as String,
+        listingId: (j['listingId'] ?? '') as String,
+        targetUserId: (j['targetUserId'] ?? '') as String,
+        targetUserName: (j['targetUserName'] ?? '') as String,
+        fromUserId: (j['fromUserId'] ?? '') as String,
+        fromUserName: (j['fromUserName'] ?? '') as String,
+        anonymous: (j['anonymous'] ?? false) as bool,
+        rating: ((j['rating'] ?? 3) as num).toInt(),
+        body: (j['body'] ?? '') as String,
+        date: (j['date'] ?? '') as String,
+      );
+}
+
 class Listing {
   String id;
   String type; // 'tenant-wanted' (room available) | 'room-wanted' (seeker)
@@ -2440,6 +2506,9 @@ class EssentialListing {
   String? address; // free text, e.g. "12 Smith St, Parramatta"
   String postedAt;
   List<String> likes;
+  // Distinct viewer user IDs, deduped so repeat views by the same person
+  // don't inflate the count. Drives the business owner's "views" analytics.
+  List<String> viewedBy;
 
   EssentialListing({
     required this.id,
@@ -2453,7 +2522,9 @@ class EssentialListing {
     this.address,
     required this.postedAt,
     List<String>? likes,
-  }) : likes = likes ?? [];
+    List<String>? viewedBy,
+  })  : likes = likes ?? [],
+        viewedBy = viewedBy ?? [];
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -2467,6 +2538,7 @@ class EssentialListing {
         if (address != null) 'address': address,
         'postedAt': postedAt,
         'likes': likes,
+        'viewedBy': viewedBy,
       };
 
   factory EssentialListing.fromJson(Map<String, dynamic> j) => EssentialListing(
@@ -2481,6 +2553,7 @@ class EssentialListing {
         address: j['address'] as String?,
         postedAt: (j['postedAt'] as String?) ?? '',
         likes: List<String>.from((j['likes'] as List?) ?? []),
+        viewedBy: List<String>.from((j['viewedBy'] as List?) ?? []),
       );
 }
 
@@ -2559,6 +2632,9 @@ class GoodsListing {
   List<Attachment> photos; // max 3, enforced in the post-item UI
   String status; // 'available' | 'sold'
   String postedAt;
+  // Distinct viewer user IDs, deduped so repeat views by the same person
+  // don't inflate the count. Drives the business owner's "views" analytics.
+  List<String> viewedBy;
 
   GoodsListing({
     required this.id,
@@ -2572,7 +2648,9 @@ class GoodsListing {
     List<Attachment>? photos,
     this.status = 'available',
     required this.postedAt,
-  }) : photos = photos ?? [];
+    List<String>? viewedBy,
+  })  : photos = photos ?? [],
+        viewedBy = viewedBy ?? [];
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -2586,6 +2664,7 @@ class GoodsListing {
         'photos': photos.map((p) => p.toJson()).toList(),
         'status': status,
         'postedAt': postedAt,
+        'viewedBy': viewedBy,
       };
 
   factory GoodsListing.fromJson(Map<String, dynamic> j) => GoodsListing(
@@ -2603,5 +2682,6 @@ class GoodsListing {
             .toList(),
         status: (j['status'] ?? 'available') as String,
         postedAt: (j['postedAt'] ?? '') as String,
+        viewedBy: List<String>.from((j['viewedBy'] as List?) ?? []),
       );
 }

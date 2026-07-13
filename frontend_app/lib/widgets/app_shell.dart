@@ -45,6 +45,10 @@ const navSections = <NavSection>[
   NavSection('/app/listings',    'Rooms & housemates', Icons.storefront_outlined,           'marketplace'),
   NavSection('/app/essentials',  'Essentials',         Icons.local_mall_outlined,            'marketplace'),
   NavSection('/app/marketplace', 'Marketplace',        Icons.sell_outlined,                  'marketplace'),
+  // Views/inquiries on anything this person has posted to Essentials or
+  // Marketplace — open to every member (tenant or leaseholder), not just
+  // business accounts, since anyone can post to either of those.
+  NavSection('/app/business',    'My listings & analytics', Icons.insights_outlined,         'marketplace'),
 
   // ── Account ───────────────────────────────────────────────────────────────────
   NavSection('/app/profile',      'Your profile',     Icons.badge_outlined,      'account'),
@@ -573,24 +577,34 @@ class _RemindToggle extends StatelessWidget {
 
 // ─── Marketplace-only shell (non-member) ─────────────────────────────────────
 
+const _businessNavPaths = ['/app/essentials', '/app/marketplace', '/app/business'];
+
 class _MarketplaceOnlyShell extends StatelessWidget {
   final String currentLocation;
   final User user;
   final Widget child;
   const _MarketplaceOnlyShell({required this.currentLocation, required this.user, required this.child});
 
+  int get _businessBottomIndex {
+    final i = _businessNavPaths.indexOf(currentLocation);
+    return i < 0 ? 0 : i;
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = HomiesScope.of(context);
+    final isBusiness = user.role == 'business';
 
     return Scaffold(
       appBar: AppBar(
-        title: const Column(
+        title: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Marketplace', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-            Text('Get invited to unlock your house', style: TextStyle(fontSize: 11, color: HomiesColors.textFaint)),
+            Text(isBusiness ? 'Business' : 'Marketplace',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: HomiesColors.text)),
+            Text(isBusiness ? 'Manage your listings & analytics' : 'Get invited to unlock your house',
+                style: const TextStyle(fontSize: 11, color: HomiesColors.textFaint)),
           ],
         ),
         bottom: PreferredSize(
@@ -638,6 +652,33 @@ class _MarketplaceOnlyShell extends StatelessWidget {
         ],
       ),
       body: child,
+      bottomNavigationBar: isBusiness
+          ? Container(
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: HomiesColors.border)),
+                color: HomiesColors.surface,
+              ),
+              child: BottomNavigationBar(
+                currentIndex: _businessBottomIndex,
+                onTap: (i) => context.go(_businessNavPaths[i]),
+                backgroundColor: Colors.transparent,
+                items: const [
+                  BottomNavigationBarItem(
+                      icon: Icon(Icons.local_mall_outlined),
+                      activeIcon: Icon(Icons.local_mall_rounded),
+                      label: 'Essentials'),
+                  BottomNavigationBarItem(
+                      icon: Icon(Icons.storefront_outlined),
+                      activeIcon: Icon(Icons.storefront_rounded),
+                      label: 'Marketplace'),
+                  BottomNavigationBarItem(
+                      icon: Icon(Icons.insights_outlined),
+                      activeIcon: Icon(Icons.insights_rounded),
+                      label: 'Analytics'),
+                ],
+              ),
+            )
+          : null,
     );
   }
 }

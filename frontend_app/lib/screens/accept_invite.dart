@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/ui_kit.dart';
 import 'signup.dart' show InviteHandoff;
@@ -17,9 +18,26 @@ class AcceptInviteScreen extends StatefulWidget {
 class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
   late final Future<DocumentSnapshot<Map<String, dynamic>>> _future =
       FirebaseFirestore.instance.collection('invites').doc(widget.code).get();
+  bool _accepting = false;
+
+  Future<void> _acceptAsExistingUser(HomiesState state, String role) async {
+    setState(() => _accepting = true);
+    try {
+      await state.joinHouseByCode(widget.code);
+      if (!mounted) return;
+      context.go(role == 'leaseholder' ? '/onboarding/leaseholder' : '/onboarding/tenant');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _accepting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Joined, but couldn't finish linking your account to the house — you may need to ask for a fresh invite. ($e)")),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -73,21 +91,36 @@ class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
                           ]),
                         ),
                         const SizedBox(height: 12),
-                        ElevatedButton(
-                          onPressed: houseId == null
-                              ? null
-                              : () => context.push(
-                                    '/signup',
-                                    extra: InviteHandoff(
-                                      code: widget.code,
-                                      email: email,
-                                      phone: phone.isEmpty ? null : phone,
-                                      role: role,
-                                      houseId: houseId,
+                        if (state.currentUser != null && state.currentUser!.member == true) ...[
+                          const Text(
+                            "You're already part of a house. Leave your current house before accepting a new invite.",
+                            style: TextStyle(color: HomiesColors.textDim),
+                          ),
+                        ] else if (state.currentUser != null && state.currentUser!.member == false) ...[
+                          ElevatedButton(
+                            onPressed: houseId == null || _accepting
+                                ? null
+                                : () => _acceptAsExistingUser(state, role),
+                            child: _accepting
+                                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Text('Accept invite'),
+                          ),
+                        ] else
+                          ElevatedButton(
+                            onPressed: houseId == null
+                                ? null
+                                : () => context.push(
+                                      '/signup',
+                                      extra: InviteHandoff(
+                                        code: widget.code,
+                                        email: email,
+                                        phone: phone.isEmpty ? null : phone,
+                                        role: role,
+                                        houseId: houseId,
+                                      ),
                                     ),
-                                  ),
-                          child: const Text('Accept & create account'),
-                        ),
+                            child: const Text('Accept & create account'),
+                          ),
                       ]);
                     },
                   ),
