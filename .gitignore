@@ -25,3 +25,6 @@ dist-ssr
 
 # Certificate private key - never commit
 cert_key
+
+# Firebase CLI local deploy cache
+.firebase/
