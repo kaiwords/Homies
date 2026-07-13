@@ -20,7 +20,7 @@ service cloud.firestore {
       allow get: if request.auth != null && (request.auth.uid == uid || isAdmin());
       allow list: if isAdmin();
       allow create: if request.auth != null && (
-        (request.auth.uid == uid && request.resource.data.role in ['tenant', 'leaseholder']) || isAdmin()
+        (request.auth.uid == uid && request.resource.data.role in ['tenant', 'leaseholder', 'business']) || isAdmin()
       );
       allow update: if request.auth != null && (
         (request.auth.uid == uid && request.resource.data.role == resource.data.role) || isAdmin()

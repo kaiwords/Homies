@@ -4,6 +4,7 @@
     "indexes": "database/firestore.indexes.json"
   },
   "storage": {
+    "target": "rules",
     "rules": "storage/storage.rules"
   }
 }
