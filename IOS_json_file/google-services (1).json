@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "451958522457",
+    "project_id": "leasely-a11e4",
+    "storage_bucket": "leasely-a11e4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:451958522457:android:fe1aceca00b74a453ce748",
+        "android_client_info": {
+          "package_name": "com.kai.poems"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBhPDiNVG3U2mmpN-BvEkhtAxvx7eyTV-8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
