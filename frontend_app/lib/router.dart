@@ -98,8 +98,20 @@ class _AuthRefreshNotifier extends ChangeNotifier {
   }
 }
 
+// go_router keys each Navigator internally via GlobalObjectKey(navigatorKey.hashCode).
+// Left unspecified, it auto-generates a fresh GlobalKey<NavigatorState> per
+// route/rebuild, and if an old one is still referenced when a new one is
+// created, their hashCodes can collide and throw "Duplicate GlobalKey" during
+// tree finalization -- observed on Flutter Web, where identity hashCodes have
+// a much smaller range than on the native VM. Explicit, stable, module-level
+// keys sidestep that entirely.
+final _rootNavigatorKey = GlobalKey<NavigatorState>();
+final _appShellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'app');
+final _adminShellNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'admin');
+
 GoRouter buildRouter(HomiesState state) {
   return GoRouter(
+    navigatorKey: _rootNavigatorKey,
     initialLocation: '/',
     refreshListenable: _AuthRefreshNotifier(state),
     redirect: (context, goState) {
@@ -144,6 +156,7 @@ GoRouter buildRouter(HomiesState state) {
       GoRoute(path: '/onboarding/leaseholder', builder: (_, _) => const LeaseholderOnboardingScreen()),
       GoRoute(path: '/onboarding/tenant', builder: (_, _) => const TenantOnboardingScreen()),
       ShellRoute(
+        navigatorKey: _appShellNavigatorKey,
         builder: (context, state, child) => AppShell(currentLocation: state.uri.path, child: child),
         routes: [
           GoRoute(path: '/app', builder: (_, _) => const DashboardScreen()),
@@ -177,6 +190,7 @@ GoRouter buildRouter(HomiesState state) {
         ],
       ),
       ShellRoute(
+        navigatorKey: _adminShellNavigatorKey,
         builder: (context, state, child) => AdminShell(currentLocation: state.uri.path, child: child),
         routes: [
           GoRoute(path: '/admin', builder: (_, _) => const AdminVerificationsScreen()),
