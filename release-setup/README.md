@@ -18,7 +18,7 @@ Key identifiers you'll see reused everywhere below:
 
 | Thing | Value |
 |---|---|
-| Firebase project | `homies-980c7` |
+| Firebase project | `leasely-a11e4` |
 | iOS bundle id | `com.kai.poems` |
 | Android package name | `com.kai.poems` |
 | App Store Connect Apple ID (numeric) | `6781926631` |
@@ -47,7 +47,7 @@ and **Storage** — no Firebase Cloud Messaging/push, so there's no APNs key or
 push entitlement to set up anywhere in this guide.
 
 1. Go to [console.firebase.google.com](https://console.firebase.google.com)
-   and open project **`homies-980c7`**.
+   and open project **`leasely-a11e4`**.
 2. Click the **gear icon → Project settings**.
 3. Scroll to **Your apps**. Confirm you see three entries:
    - An **iOS** app with bundle id `com.kai.poems`
@@ -83,13 +83,13 @@ push entitlement to set up anywhere in this guide.
    region, click **Enable**. Then deploy this repo's rules so it's not wide
    open — from `backend/database/`, run:
    ```
-   firebase deploy --only firestore:rules --project homies-980c7
+   firebase deploy --only firestore:rules --project leasely-a11e4
    ```
 9. Confirm Storage exists: left sidebar **Build → Storage**. Same idea — if
    missing, click **Get started**, accept the defaults. Deploy this repo's
    rules from `backend/storage/`:
    ```
-   firebase deploy --only storage:rules --project homies-980c7
+   firebase deploy --only storage:rules --project leasely-a11e4
    ```
 10. Generate the service-account key the admin backend needs (this is
     separate from the client config files above):
@@ -290,7 +290,7 @@ run this from `frontend_app/`:
 
 ```
 dart pub global activate flutterfire_cli
-flutterfire configure --project=homies-980c7 --platforms=ios,android,web
+flutterfire configure --project=leasely-a11e4 --platforms=ios,android,web
 ```
 
 It detects the existing `com.kai.poems` apps in Firebase and regenerates the

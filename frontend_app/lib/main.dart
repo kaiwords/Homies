@@ -14,24 +14,26 @@ import 'theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  Intl.defaultLocale = 'en_AU';
-  await initializeDateFormatting('en_AU', null);
 
   // iOS kills the app if it takes too long between launch and the first
   // rendered frame (the launch watchdog) — a real-device-only limit that a
-  // debug/emulator run never hits. Firebase.initializeApp() and state.load()
-  // can each stall for many seconds on a slow/absent connection, and awaiting
-  // them here before runApp() risks tripping that watchdog: the app never
-  // gets a chance to draw anything and iOS just kills it, indistinguishable
-  // from a permanent black screen with no crash log. Every HomiesState field
-  // has a safe default (seed data / empty lists), so call runApp()
-  // immediately and let Firebase/state loading finish in the background;
-  // state.load() and the Firebase auth listener both call notifyListeners()
-  // when data arrives, so the UI updates itself once ready.
+  // debug/emulator run never hits. Firebase.initializeApp(), state.load(),
+  // and initializeDateFormatting() can each stall or throw on a real device
+  // (slow/absent connection, locale-data load), and awaiting any of them
+  // here before runApp() risks either tripping that watchdog or, if one
+  // throws, never reaching runApp() at all — a release build shows no error
+  // UI for an uncaught exception in main(), so the launch screen just stays
+  // up forever: a permanent black screen indistinguishable from a hang.
+  // Every HomiesState field has a safe default (seed data / empty lists),
+  // and Intl.defaultLocale plus DateFormat's implicit fallback both work
+  // before initializeDateFormatting completes, so call runApp() immediately
+  // and let all of this finish in the background; state.load() and the
+  // Firebase auth listener both call notifyListeners() when data arrives,
+  // so the UI updates itself once ready.
   final state = HomiesState();
   runApp(HomiesApp(state: state));
 
-  unawaited(_initFirebaseAndLoadState(state));
+  unawaited(_initLocaleFirebaseAndLoadState(state));
 
   // NotificationService.init() triggers the native "Allow Notifications?"
   // permission prompt and awaits its result — that await can hang forever on
@@ -41,7 +43,17 @@ void main() async {
   unawaited(NotificationService.init().then((_) => NotificationService.scheduleFromState(state)));
 }
 
-Future<void> _initFirebaseAndLoadState(HomiesState state) async {
+Future<void> _initLocaleFirebaseAndLoadState(HomiesState state) async {
+  try {
+    Intl.defaultLocale = 'en_AU';
+    await initializeDateFormatting('en_AU', null).timeout(const Duration(seconds: 10));
+  } catch (e) {
+    if (kDebugMode) {
+      // ignore: avoid_print
+      print('initializeDateFormatting failed or timed out: $e');
+    }
+  }
+
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
