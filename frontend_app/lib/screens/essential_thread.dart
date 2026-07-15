@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
-// import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../state/app_state.dart';
@@ -94,41 +94,43 @@ class _EssentialThreadScreenState extends State<EssentialThreadScreen> {
     _jumpToEnd();
   }
 
-  // Future<void> _pickPhoto() async {
-  //   final result = await FilePicker.platform.pickFiles(
-  //     type: FileType.custom,
-  //     allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
-  //     withData: true,
-  //   );
-  //   if (result == null || result.files.isEmpty) return;
-  //   final f = result.files.first;
-  //   if (f.bytes == null) return;
-  //   if (f.size > 2 * 1024 * 1024) {
-  //     if (mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         const SnackBar(content: Text('Image too large — keep it under 2 MB.')),
-  //       );
-  //     }
-  //     return;
-  //   }
-  //   final ext = (f.extension ?? '').toLowerCase();
-  //   final type = switch (ext) {
-  //     'jpg' || 'jpeg' => 'image/jpeg',
-  //     'png' => 'image/png',
-  //     'gif' => 'image/gif',
-  //     'webp' => 'image/webp',
-  //     _ => 'image/jpeg',
-  //   };
-  //   setState(() {
-  //     _pendingPhoto = Attachment(
-  //       fileName: f.name,
-  //       dataUrl: 'data:$type;base64,${base64Encode(f.bytes!)}',
-  //       type: type,
-  //       size: f.size,
-  //       uploadedAt: DateTime.now().toIso8601String(),
-  //     );
-  //   });
-  // }
+  Future<void> _pickPhoto() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final f = result.files.first;
+    if (f.bytes == null) return;
+    if (f.size > 2 * 1024 * 1024) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Image too large — keep it under 2 MB.'),
+          ),
+        );
+      }
+      return;
+    }
+    final ext = (f.extension ?? '').toLowerCase();
+    final type = switch (ext) {
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'png' => 'image/png',
+      'gif' => 'image/gif',
+      'webp' => 'image/webp',
+      _ => 'image/jpeg',
+    };
+    setState(() {
+      _pendingPhoto = Attachment(
+        fileName: f.name,
+        dataUrl: 'data:$type;base64,${base64Encode(f.bytes!)}',
+        type: type,
+        size: f.size,
+        uploadedAt: DateTime.now().toIso8601String(),
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -239,8 +241,7 @@ class _EssentialThreadScreenState extends State<EssentialThreadScreen> {
                         tooltip: 'Send photo',
                         visualDensity: VisualDensity.compact,
 
-                        onPressed: () {},
-                        // onPressed: _pickPhoto,
+                        onPressed: _pickPhoto,
                       ),
                       const SizedBox(width: 4),
                       Expanded(
