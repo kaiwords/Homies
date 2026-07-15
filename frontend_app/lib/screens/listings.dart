@@ -95,6 +95,18 @@ class _ListingsScreenState extends State<ListingsScreen> {
   String? _alcoholFilter;
   bool? _billsFilter; // true = bills included only
 
+  // Manual memo caches for the two listing filters in build() below.
+  // `archivedListings` in particular does a nested O(n*m) scan over
+  // listingInterests/postMessages/inspections on top of the listings filter,
+  // and both used to be recomputed from scratch on every rebuild -- including
+  // rebuilds triggered by completely unrelated state elsewhere in the app
+  // (bills, chores, messages, etc.). We only recompute when the fields the
+  // filters actually read have changed.
+  Object? _listingsMemoKey;
+  List<Listing>? _cachedListings;
+  Object? _archivedMemoKey;
+  List<Listing>? _cachedArchivedListings;
+
   @override
   void dispose() {
     _locationCtrl.dispose();
@@ -134,25 +146,62 @@ class _ListingsScreenState extends State<ListingsScreen> {
     final isLeaseholder = cu.role == 'leaseholder';
 
     final locationQ = _locationCtrl.text.trim().toLowerCase();
-    final listings = state.listings.where((l) {
-      if (l.type != tab || l.status != 'open') return false;
-      if (_isOlderThanOneMonth(l.createdAt)) return false;
-      if (locationQ.isNotEmpty && !l.suburb.toLowerCase().contains(locationQ)) return false;
-      if (_genderFilter != null && _genderFilter != 'any' && l.genderPref != null && l.genderPref != 'any' && l.genderPref != _genderFilter) return false;
-      if (_smokingFilter != null && l.smokingPref != null && l.smokingPref != _smokingFilter) return false;
-      if (_alcoholFilter != null && l.alcoholPref != null && l.alcoholPref != _alcoholFilter) return false;
-      if (_billsFilter == true && !l.billsIncluded) return false;
-      return true;
-    }).toList();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
 
-    final archivedListings = state.listings.where((l) {
-      if (l.type != tab) return false;
-      if (!_isOlderThanOneMonth(l.createdAt)) return false;
-      return l.by == cu.id ||
-          state.listingInterests.any((i) => i.listingId == l.id && (i.from == cu.id || i.to == cu.id)) ||
-          state.postMessages.any((m) => m.listingId == l.id && (m.from == cu.id || m.to == cu.id)) ||
-          state.inspections.any((i) => i.listingId == l.id && (i.requestedBy == cu.id || i.to == cu.id));
-    }).toList();
+    final listingsMemoKey = (
+      Object.hashAll(state.listings.map((l) => Object.hash(
+          l.id, l.type, l.status, l.createdAt, l.suburb, l.genderPref, l.smokingPref, l.alcoholPref, l.billsIncluded))),
+      tab,
+      locationQ,
+      _genderFilter,
+      _smokingFilter,
+      _alcoholFilter,
+      _billsFilter,
+      today,
+    );
+    List<Listing> listings;
+    if (_listingsMemoKey == listingsMemoKey && _cachedListings != null) {
+      listings = _cachedListings!;
+    } else {
+      listings = state.listings.where((l) {
+        if (l.type != tab || l.status != 'open') return false;
+        if (_isOlderThanOneMonth(l.createdAt)) return false;
+        if (locationQ.isNotEmpty && !l.suburb.toLowerCase().contains(locationQ)) return false;
+        if (_genderFilter != null && _genderFilter != 'any' && l.genderPref != null && l.genderPref != 'any' && l.genderPref != _genderFilter) return false;
+        if (_smokingFilter != null && l.smokingPref != null && l.smokingPref != _smokingFilter) return false;
+        if (_alcoholFilter != null && l.alcoholPref != null && l.alcoholPref != _alcoholFilter) return false;
+        if (_billsFilter == true && !l.billsIncluded) return false;
+        return true;
+      }).toList();
+      _listingsMemoKey = listingsMemoKey;
+      _cachedListings = listings;
+    }
+
+    final archivedMemoKey = (
+      Object.hashAll(state.listings.map((l) => Object.hash(l.id, l.type, l.createdAt, l.by))),
+      Object.hashAll(state.listingInterests.map((i) => Object.hash(i.listingId, i.from, i.to))),
+      Object.hashAll(state.postMessages.map((m) => Object.hash(m.listingId, m.from, m.to))),
+      Object.hashAll(state.inspections.map((i) => Object.hash(i.listingId, i.requestedBy, i.to))),
+      tab,
+      cu.id,
+      today,
+    );
+    List<Listing> archivedListings;
+    if (_archivedMemoKey == archivedMemoKey && _cachedArchivedListings != null) {
+      archivedListings = _cachedArchivedListings!;
+    } else {
+      archivedListings = state.listings.where((l) {
+        if (l.type != tab) return false;
+        if (!_isOlderThanOneMonth(l.createdAt)) return false;
+        return l.by == cu.id ||
+            state.listingInterests.any((i) => i.listingId == l.id && (i.from == cu.id || i.to == cu.id)) ||
+            state.postMessages.any((m) => m.listingId == l.id && (m.from == cu.id || m.to == cu.id)) ||
+            state.inspections.any((i) => i.listingId == l.id && (i.requestedBy == cu.id || i.to == cu.id));
+      }).toList();
+      _archivedMemoKey = archivedMemoKey;
+      _cachedArchivedListings = archivedListings;
+    }
 
     final inbox = state.listingInterests.where((i) => i.to == cu.id).toList();
     final sent = state.listingInterests.where((i) => i.from == cu.id).toList();

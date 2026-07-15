@@ -32,18 +32,57 @@ class BillsScreen extends StatefulWidget {
 class _BillsScreenState extends State<BillsScreen> {
   String _tab = 'bills';
 
+  // Manual memo caches for the derived lists below. They used to be
+  // filtered/sorted from scratch on every rebuild, including rebuilds
+  // triggered by completely unrelated state elsewhere in the app (chores,
+  // messages, etc.). Recompute only when the fields each filter actually
+  // reads have changed. `dueSoon` also depends on the current day (a
+  // schedule can cross the "due within 7 days" boundary without any of its
+  // own fields changing), so the day is folded into its key too.
+  Object? _dueSoonMemoKey;
+  List<BillSchedule>? _cachedDueSoon;
+  Object? _billsMemoKey;
+  List<Bill>? _cachedUpcoming;
+  List<Bill>? _cachedHistory;
+
   @override
   Widget build(BuildContext context) {
     final state = HomiesScope.of(context);
     final isLeaseholder = state.currentUser?.role == 'leaseholder';
     final schedules = state.billSchedules;
-    final dueSoon = schedules
-        .where((s) => s.active && (parseIso(s.nextDueDate)?.difference(DateTime.now()).inDays ?? 999) <= 7)
-        .toList();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final dueSoonMemoKey = (
+      Object.hashAll(schedules.map((s) => Object.hash(s.id, s.active, s.nextDueDate))),
+      today,
+    );
+    List<BillSchedule> dueSoon;
+    if (_dueSoonMemoKey == dueSoonMemoKey && _cachedDueSoon != null) {
+      dueSoon = _cachedDueSoon!;
+    } else {
+      dueSoon = schedules
+          .where((s) => s.active && (parseIso(s.nextDueDate)?.difference(DateTime.now()).inDays ?? 999) <= 7)
+          .toList();
+      _dueSoonMemoKey = dueSoonMemoKey;
+      _cachedDueSoon = dueSoon;
+    }
+
     // Upcoming = anything not fully settled. Settled bills move into History.
-    final upcoming = state.bills.where((b) => b.status != 'settled').toList();
-    final history = state.bills.where((b) => b.status == 'settled').toList()
-      ..sort((a, b) => b.dueDate.compareTo(a.dueDate));
+    final billsMemoKey = Object.hashAll(state.bills.map((b) => Object.hash(b.id, b.status, b.dueDate)));
+    List<Bill> upcoming;
+    List<Bill> history;
+    if (_billsMemoKey == billsMemoKey && _cachedUpcoming != null && _cachedHistory != null) {
+      upcoming = _cachedUpcoming!;
+      history = _cachedHistory!;
+    } else {
+      upcoming = state.bills.where((b) => b.status != 'settled').toList();
+      history = state.bills.where((b) => b.status == 'settled').toList()
+        ..sort((a, b) => b.dueDate.compareTo(a.dueDate));
+      _billsMemoKey = billsMemoKey;
+      _cachedUpcoming = upcoming;
+      _cachedHistory = history;
+    }
 
     return SafeArea(
       child: SingleChildScrollView(

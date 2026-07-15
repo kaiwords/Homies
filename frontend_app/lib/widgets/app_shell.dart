@@ -69,31 +69,73 @@ const groupLabels = {
 
 const bottomNavPaths = ['/app', '/app/finance', '/app/marketplace', '/app/essentials'];
 
-class AppShell extends StatelessWidget {
+class AppShell extends StatefulWidget {
   final Widget child;
   final String currentLocation;
   const AppShell({super.key, required this.child, required this.currentLocation});
 
-  int get _bottomIndex {
-    for (var i = 0; i < bottomNavPaths.length; i++) {
-      if (currentLocation == bottomNavPaths[i]) return i;
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+// `HomiesState.mutate()` calls notifyListeners() on every mutation app-wide
+// (bills, chores, messages, etc.). Using `HomiesScope.of(context)` here would
+// subscribe this whole chrome (app bar, drawer, bottom nav) to *all* of that
+// via InheritedNotifier, forcing a full rebuild on every unrelated change.
+//
+// Instead — same discipline as `_AuthRefreshNotifier` in router.dart — we
+// read the notifier without subscribing to the InheritedWidget (so no
+// automatic rebuild), hand-roll a listener, and only setState() when one of
+// the specific values this chrome actually displays changes.
+class _AppShellState extends State<AppShell> {
+  HomiesState? _state;
+
+  User? _user;
+  String? _userId;
+  bool _userMember = false;
+  String _userRole = '';
+  String _propertyAddress = '';
+  int _propertyBedrooms = 0;
+  int _activeCount = 0;
+  int _pendingComplaints = 0;
+  int _pendingTasks = 0;
+  int _notifCount = 0;
+  int _unreadAppNotifs = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final element = context.getElementForInheritedWidgetOfExactType<HomiesScope>();
+    final newState = (element?.widget as HomiesScope?)?.notifier;
+    if (newState != _state) {
+      _state?.removeListener(_handleStateChanged);
+      _state = newState;
+      _state?.addListener(_handleStateChanged);
+      _recomputeChrome();
     }
-    if (currentLocation.startsWith('/app/finance')) return 1;
-    if (currentLocation.startsWith('/app/bills')) return 1;
-    if (currentLocation.startsWith('/app/marketplace')) return 2;
-    if (currentLocation.startsWith('/app/essentials')) return 3;
-    return 0;
   }
 
   @override
-  Widget build(BuildContext context) {
-    final state = HomiesScope.of(context);
+  void dispose() {
+    _state?.removeListener(_handleStateChanged);
+    super.dispose();
+  }
+
+  void _handleStateChanged() => _recomputeChrome();
+
+  void _recomputeChrome() {
+    final state = _state;
+    if (state == null) return;
     final user = state.currentUser;
+
     if (user == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-    if (!user.member) {
-      return _MarketplaceOnlyShell(currentLocation: currentLocation, user: user, child: child);
+      if (_user != null || _userId != null) {
+        setState(() {
+          _user = null;
+          _userId = null;
+        });
+      }
+      return;
     }
 
     final activeCount = state.activeHousemates.length;
@@ -110,6 +152,63 @@ class AppShell extends StatelessWidget {
     }).length;
     final notifCount = pendingTasks + upcomingBills;
     final unreadAppNotifs = state.appNotifications.where((n) => n.forUserId == uid && !n.isRead).length;
+    final address = state.property.address;
+    final bedrooms = state.property.bedrooms;
+
+    final unchanged = uid == _userId &&
+        user.member == _userMember &&
+        user.role == _userRole &&
+        activeCount == _activeCount &&
+        pendingComplaints == _pendingComplaints &&
+        pendingTasks == _pendingTasks &&
+        notifCount == _notifCount &&
+        unreadAppNotifs == _unreadAppNotifs &&
+        address == _propertyAddress &&
+        bedrooms == _propertyBedrooms;
+    if (unchanged) return;
+
+    setState(() {
+      _user = user;
+      _userId = uid;
+      _userMember = user.member;
+      _userRole = user.role;
+      _activeCount = activeCount;
+      _pendingComplaints = pendingComplaints;
+      _pendingTasks = pendingTasks;
+      _notifCount = notifCount;
+      _unreadAppNotifs = unreadAppNotifs;
+      _propertyAddress = address;
+      _propertyBedrooms = bedrooms;
+    });
+  }
+
+  int get _bottomIndex {
+    final currentLocation = widget.currentLocation;
+    for (var i = 0; i < bottomNavPaths.length; i++) {
+      if (currentLocation == bottomNavPaths[i]) return i;
+    }
+    if (currentLocation.startsWith('/app/finance')) return 1;
+    if (currentLocation.startsWith('/app/bills')) return 1;
+    if (currentLocation.startsWith('/app/marketplace')) return 2;
+    if (currentLocation.startsWith('/app/essentials')) return 3;
+    return 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = _user;
+    if (user == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (!user.member) {
+      return _MarketplaceOnlyShell(currentLocation: widget.currentLocation, user: user, child: widget.child);
+    }
+
+    final activeCount = _activeCount;
+    final pendingComplaints = _pendingComplaints;
+    final pendingTasks = _pendingTasks;
+    final notifCount = _notifCount;
+    final unreadAppNotifs = _unreadAppNotifs;
 
     return Scaffold(
       appBar: AppBar(
@@ -118,12 +217,12 @@ class AppShell extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              state.property.address,
+              _propertyAddress,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: HomiesColors.text),
               overflow: TextOverflow.ellipsis,
             ),
             Text(
-              '${state.property.bedrooms}-bed · $activeCount living here',
+              '$_propertyBedrooms-bed · $activeCount living here',
               style: const TextStyle(fontSize: 11, color: HomiesColors.textFaint),
             ),
           ],
@@ -252,7 +351,7 @@ class AppShell extends StatelessWidget {
                           n.group == group && (user.role == 'leaseholder' || !n.leaseholderOnly)))
                         _DrawerItem(
                           section: s,
-                          active: currentLocation == s.path,
+                          active: widget.currentLocation == s.path,
                           badge: s.path == '/app/complaints' && pendingComplaints > 0
                               ? pendingComplaints
                               : s.path == '/app/cleaning' && pendingTasks > 0
@@ -272,7 +371,7 @@ class AppShell extends StatelessWidget {
       // Don't re-wrap it in a keyed AnimatedSwitcher: that put two transition
       // systems on the same GlobalKey'd subtree and caused the old screen's
       // last frame to linger onscreen during navigation.
-      body: child,
+      body: widget.child,
 
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(

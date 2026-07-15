@@ -1209,30 +1209,62 @@ const _slots = [
   '8:00 PM – 10:00 PM',
 ];
 
-class _ApplianceBookingCard extends StatelessWidget {
+class _ApplianceBookingCard extends StatefulWidget {
   const _ApplianceBookingCard();
+
+  @override
+  State<_ApplianceBookingCard> createState() => _ApplianceBookingCardState();
+}
+
+class _ApplianceBookingCardState extends State<_ApplianceBookingCard> {
+  // Manual memo cache for the filter + sort + group-by-date below. It used
+  // to be recomputed from scratch on every rebuild, including rebuilds
+  // triggered by completely unrelated state elsewhere in the app (bills,
+  // chores, messages, etc.). The 7-day upcoming window also depends on the
+  // current day, so that's folded into the key too.
+  Object? _memoKey;
+  List<String>? _cachedDates;
+  Map<String, List<ApplianceBooking>>? _cachedByDate;
 
   @override
   Widget build(BuildContext context) {
     final state = HomiesScope.of(context);
     final cu = state.currentUser!;
     final isLeaseholder = cu.role == 'leaseholder';
-    final todayIsoStr = toIso(DateTime.now())!;
-    final cutoff = toIso(DateTime.now().add(const Duration(days: 6)))!;
+    final now = DateTime.now();
+    final todayIsoStr = toIso(now)!;
+    final cutoff = toIso(now.add(const Duration(days: 6)))!;
+    final today = DateTime(now.year, now.month, now.day);
 
-    final upcoming = state.applianceBookings
-        .where((b) => b.date.compareTo(todayIsoStr) >= 0 && b.date.compareTo(cutoff) <= 0)
-        .toList()
-      ..sort((a, b) {
-        final d = a.date.compareTo(b.date);
-        return d != 0 ? d : a.slot.compareTo(b.slot);
-      });
+    final memoKey = (
+      Object.hashAll(state.applianceBookings.map((b) => Object.hash(b.id, b.date, b.slot))),
+      today,
+    );
 
-    final byDate = <String, List<ApplianceBooking>>{};
-    for (final b in upcoming) {
-      (byDate[b.date] ??= []).add(b);
+    List<String> dates;
+    Map<String, List<ApplianceBooking>> byDate;
+    if (_memoKey == memoKey && _cachedDates != null && _cachedByDate != null) {
+      dates = _cachedDates!;
+      byDate = _cachedByDate!;
+    } else {
+      final upcoming = state.applianceBookings
+          .where((b) => b.date.compareTo(todayIsoStr) >= 0 && b.date.compareTo(cutoff) <= 0)
+          .toList()
+        ..sort((a, b) {
+          final d = a.date.compareTo(b.date);
+          return d != 0 ? d : a.slot.compareTo(b.slot);
+        });
+
+      final grouped = <String, List<ApplianceBooking>>{};
+      for (final b in upcoming) {
+        (grouped[b.date] ??= []).add(b);
+      }
+      dates = grouped.keys.toList()..sort();
+      byDate = grouped;
+      _memoKey = memoKey;
+      _cachedDates = dates;
+      _cachedByDate = byDate;
     }
-    final dates = byDate.keys.toList()..sort();
 
     return HomiesCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -1253,7 +1285,7 @@ class _ApplianceBookingCard extends StatelessWidget {
           'Reserve the washing machine, dryer and other shared appliances.',
           style: TextStyle(color: HomiesColors.textDim, fontSize: 12),
         ),
-        if (upcoming.isEmpty) ...[
+        if (dates.isEmpty) ...[
           const SizedBox(height: 10),
           const Text('No bookings in the next 7 days.', style: TextStyle(color: HomiesColors.textFaint, fontSize: 12)),
         ] else ...[

@@ -28,18 +28,61 @@ IconData _billCategoryIcon(String category) {
   }
 }
 
-class FinanceScreen extends StatelessWidget {
+class FinanceScreen extends StatefulWidget {
   const FinanceScreen({super.key});
+
+  @override
+  State<FinanceScreen> createState() => _FinanceScreenState();
+}
+
+class _FinanceScreenState extends State<FinanceScreen> {
+  // Manual memo caches for the three derived lists below. They used to be
+  // filtered/sorted from scratch on every rebuild, including rebuilds
+  // triggered by completely unrelated state elsewhere in the app (chores,
+  // messages, etc.). Recompute only when the fields each filter actually
+  // reads have changed.
+  Object? _billsMemoKey;
+  List<Bill>? _cachedPendingBills;
+  Object? _groceriesMemoKey;
+  List<Grocery>? _cachedSharedGroceries;
+  Object? _necessitiesMemoKey;
+  List<Necessity>? _cachedSharedNecessities;
 
   @override
   Widget build(BuildContext context) {
     final state = HomiesScope.of(context);
     final cu = state.currentUser!;
 
-    final pendingBills = state.bills.where((b) => b.status != 'settled').toList()
-      ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
-    final sharedGroceries = state.groceries.where((g) => g.mode == 'shared').toList();
-    final sharedNecessities = state.necessities.where((n) => n.mode == 'shared').toList();
+    final billsMemoKey = Object.hashAll(state.bills.map((b) => Object.hash(b.id, b.status, b.dueDate)));
+    List<Bill> pendingBills;
+    if (_billsMemoKey == billsMemoKey && _cachedPendingBills != null) {
+      pendingBills = _cachedPendingBills!;
+    } else {
+      pendingBills = state.bills.where((b) => b.status != 'settled').toList()
+        ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+      _billsMemoKey = billsMemoKey;
+      _cachedPendingBills = pendingBills;
+    }
+
+    final groceriesMemoKey = Object.hashAll(state.groceries.map((g) => Object.hash(g.id, g.mode)));
+    List<Grocery> sharedGroceries;
+    if (_groceriesMemoKey == groceriesMemoKey && _cachedSharedGroceries != null) {
+      sharedGroceries = _cachedSharedGroceries!;
+    } else {
+      sharedGroceries = state.groceries.where((g) => g.mode == 'shared').toList();
+      _groceriesMemoKey = groceriesMemoKey;
+      _cachedSharedGroceries = sharedGroceries;
+    }
+
+    final necessitiesMemoKey = Object.hashAll(state.necessities.map((n) => Object.hash(n.id, n.mode)));
+    List<Necessity> sharedNecessities;
+    if (_necessitiesMemoKey == necessitiesMemoKey && _cachedSharedNecessities != null) {
+      sharedNecessities = _cachedSharedNecessities!;
+    } else {
+      sharedNecessities = state.necessities.where((n) => n.mode == 'shared').toList();
+      _necessitiesMemoKey = necessitiesMemoKey;
+      _cachedSharedNecessities = sharedNecessities;
+    }
 
     final isEmpty = pendingBills.isEmpty &&
         state.subscriptions.isEmpty &&
