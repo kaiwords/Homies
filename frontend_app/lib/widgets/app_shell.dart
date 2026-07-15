@@ -268,30 +268,11 @@ class AppShell extends StatelessWidget {
         ),
       ),
 
-      // Keyed AnimatedSwitcher gives a smooth fade+rise between pages.
-      // The outgoing child is hidden immediately (opacity 0) so its content
-      // never bleeds through the transparent incoming screen during the fade-in.
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 240),
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeIn,
-        transitionBuilder: (child, animation) => AnimatedBuilder(
-          animation: animation,
-          builder: (context, _) {
-            final isOutgoing = animation.status == AnimationStatus.reverse ||
-                animation.status == AnimationStatus.dismissed;
-            return Opacity(
-              opacity: isOutgoing ? 0.0 : animation.value,
-              child: SlideTransition(
-                position: Tween<Offset>(begin: const Offset(0, 0.016), end: Offset.zero)
-                    .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-                child: child,
-              ),
-            );
-          },
-        ),
-        child: KeyedSubtree(key: ValueKey(currentLocation), child: child),
-      ),
+      // `child` is go_router's ShellRoute Navigator (owns _appShellNavigatorKey).
+      // Don't re-wrap it in a keyed AnimatedSwitcher: that put two transition
+      // systems on the same GlobalKey'd subtree and caused the old screen's
+      // last frame to linger onscreen during navigation.
+      body: child,
 
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
