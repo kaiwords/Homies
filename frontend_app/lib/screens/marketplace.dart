@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 
 import '../state/app_state.dart';
 import '../state/models.dart';
@@ -112,11 +113,41 @@ class GoodsMarketplaceScreen extends StatefulWidget {
 class _GoodsMarketplaceScreenState extends State<GoodsMarketplaceScreen> {
   String _filter = 'all';
   final _searchCtrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
+
+  // Collapses the title header on scroll-down (more room for listings) and
+  // brings it back on scroll-up or once back at the top, mirroring the
+  // standard "hide-on-scroll" toolbar pattern. Search + category chips stay
+  // put since they're functional controls, not branding.
+  bool _headerVisible = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollCtrl.addListener(_handleScroll);
+  }
 
   @override
   void dispose() {
+    _scrollCtrl.removeListener(_handleScroll);
+    _scrollCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  void _handleScroll() {
+    if (!_scrollCtrl.hasClients) return;
+    final pixels = _scrollCtrl.position.pixels;
+    if (pixels <= 8) {
+      if (!_headerVisible) setState(() => _headerVisible = true);
+      return;
+    }
+    final dir = _scrollCtrl.position.userScrollDirection;
+    if (dir == ScrollDirection.reverse && _headerVisible) {
+      setState(() => _headerVisible = false);
+    } else if (dir == ScrollDirection.forward && !_headerVisible) {
+      setState(() => _headerVisible = true);
+    }
   }
 
   @override
@@ -141,52 +172,65 @@ class _GoodsMarketplaceScreenState extends State<GoodsMarketplaceScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text(
-                      'Marketplace',
-                      style: TextStyle(
-                        fontSize: 23,
-                        fontWeight: FontWeight.w700,
-                        color: HomiesColors.text,
-                        letterSpacing: -0.5,
-                        height: 1.2,
+          // Header — collapses on scroll-down, reappears on scroll-up or
+          // once back at the top, so listings get more room to breathe.
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOut,
+            alignment: Alignment.topCenter,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 160),
+              opacity: _headerVisible ? 1 : 0,
+              child: SizedBox(
+                height: _headerVisible ? null : 0,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const Text(
+                            'Marketplace',
+                            style: TextStyle(
+                              fontSize: 23,
+                              fontWeight: FontWeight.w700,
+                              color: HomiesColors.text,
+                              letterSpacing: -0.5,
+                              height: 1.2,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Buy and sell with your community.',
+                            style: TextStyle(fontSize: 13, color: HomiesColors.textDim),
+                          ),
+                        ]),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Buy and sell with your community.',
-                      style: TextStyle(fontSize: 13, color: HomiesColors.textDim),
-                    ),
-                  ]),
-                ),
-                const SizedBox(width: 4),
-                _BadgeIconButton(
-                  icon: Icons.chat_bubble_outline,
-                  tooltip: 'Messages',
-                  count: convs.length,
-                  onPressed: () => _openGoodsConversations(context, convs, state, user),
-                ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  onPressed: () => _showPostSheet(context, state, user),
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Sell', style: TextStyle(fontSize: 13)),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: HomiesColors.accent,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      const SizedBox(width: 4),
+                      _BadgeIconButton(
+                        icon: Icons.chat_bubble_outline,
+                        tooltip: 'Messages',
+                        count: convs.length,
+                        onPressed: () => _openGoodsConversations(context, convs, state, user),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton.icon(
+                        onPressed: () => _showPostSheet(context, state, user),
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Sell', style: TextStyle(fontSize: 13)),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: HomiesColors.accent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
           ),
 
@@ -272,6 +316,7 @@ class _GoodsMarketplaceScreenState extends State<GoodsMarketplaceScreen> {
                     onPost: () => _showPostSheet(context, state, user),
                   )
                 : GridView.builder(
+                    controller: _scrollCtrl,
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,

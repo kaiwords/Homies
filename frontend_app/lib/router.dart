@@ -159,34 +159,58 @@ GoRouter buildRouter(HomiesState state) {
         navigatorKey: _appShellNavigatorKey,
         builder: (context, state, child) => AppShell(currentLocation: state.uri.path, child: child),
         routes: [
-          GoRoute(path: '/app', builder: (_, _) => const DashboardScreen()),
-          GoRoute(path: '/app/profile', builder: (_, _) => const ProfileScreen()),
-          GoRoute(path: '/app/property', builder: (_, _) => const PropertyScreen()),
-          GoRoute(path: '/app/housemates', builder: (_, _) => const HousematesScreen()),
-          GoRoute(path: '/app/performance', builder: (_, _) => const TenantPerformanceScreen()),
-          GoRoute(path: '/app/listings', builder: (_, _) => const ListingsScreen()),
-          GoRoute(path: '/app/bills', builder: (_, _) => const BillsScreen()),
-          GoRoute(path: '/app/subscriptions', builder: (_, _) => const SubscriptionsScreen()),
-          GoRoute(path: '/app/groceries', builder: (_, _) => const GroceriesScreen()),
-          GoRoute(path: '/app/necessities', builder: (_, _) => const NecessitiesScreen()),
-          GoRoute(path: '/app/cleaning', builder: (_, _) => const CleaningScreen()),
-          GoRoute(path: '/app/rules', builder: (_, _) => const HouseRulesScreen()),
-          GoRoute(path: '/app/parties', builder: (_, _) => const PartiesScreen()),
-          GoRoute(path: '/app/messages', builder: (_, _) => const MessagesScreen()),
-          GoRoute(path: '/app/issues', builder: (_, _) => const IssuesScreen()),
-          GoRoute(path: '/app/complaints', builder: (_, _) => const ComplaintsScreen()),
-          GoRoute(path: '/app/finance', builder: (_, _) => const FinanceScreen()),
-          GoRoute(path: '/app/my-spending', builder: (_, _) => const MySpendingScreen()),
-          GoRoute(path: '/app/shopping', builder: (_, s) => const ShoppingListScreen()),
-          GoRoute(path: '/app/notifications', builder: (_, s) => const NotificationsScreen()),
-          GoRoute(path: '/app/calendar', builder: (_, s) => const CalendarScreen()),
-          GoRoute(path: '/app/maintenance', builder: (_, _) => const MaintenanceContactsScreen()),
-          GoRoute(path: '/app/welcome-guide', builder: (_, _) => const WelcomeGuideScreen()),
-          GoRoute(path: '/app/leaving', builder: (_, _) => const LeavingScreen()),
-          GoRoute(path: '/app/terms', builder: (_, _) => const TermsScreen()),
-          GoRoute(path: '/app/essentials', builder: (_, _) => const EssentialsScreen()),
-          GoRoute(path: '/app/marketplace', builder: (_, _) => const GoodsMarketplaceScreen()),
-          GoRoute(path: '/app/business', builder: (_, _) => const BusinessDashboardScreen()),
+          // These are flat sibling "destinations" reached via the bottom nav
+          // bar / drawer, not a drill-down stack -- every one of them shares
+          // the single `_appShellNavigatorKey` Navigator, so switching between
+          // any two of them is a same-navigator page *replace* (old route's
+          // key leaves the pages list, new route's key enters it), not a
+          // push/pop of a growing stack.
+          //
+          // With the default `builder:` (no `pageBuilder:`), go_router wraps
+          // each screen in a plain `MaterialPage`, so that replace plays the
+          // theme's full push/pop transition (Android: ZoomPageTransitionsBuilder
+          // fade+scale, ~300ms) between the two *independent* screens. None of
+          // these screens own an opaque Scaffold (they're bare `SafeArea`s that
+          // rely on AppShell's single outer Scaffold for background/chrome), so
+          // for the whole transition window both the outgoing and incoming
+          // screen are simultaneously partially visible/animating in the same
+          // body area -- what reads as "the previous screen lingers before the
+          // next one appears" when tapping between tabs (e.g. Essentials <->
+          // Marketplace). `NoTransitionPage` makes the swap instant (matching
+          // how a tab bar is expected to behave) and removes that window
+          // entirely. Drill-down navigation from within a screen (e.g. opening
+          // a listing's detail page) is unaffected -- those go through plain
+          // `Navigator.push(MaterialPageRoute(...))` on the inner navigator,
+          // not through these GoRoutes, so they keep their normal push
+          // animation.
+          GoRoute(path: '/app', pageBuilder: (_, _) => const NoTransitionPage(child: DashboardScreen())),
+          GoRoute(path: '/app/profile', pageBuilder: (_, _) => const NoTransitionPage(child: ProfileScreen())),
+          GoRoute(path: '/app/property', pageBuilder: (_, _) => const NoTransitionPage(child: PropertyScreen())),
+          GoRoute(path: '/app/housemates', pageBuilder: (_, _) => const NoTransitionPage(child: HousematesScreen())),
+          GoRoute(path: '/app/performance', pageBuilder: (_, _) => const NoTransitionPage(child: TenantPerformanceScreen())),
+          GoRoute(path: '/app/listings', pageBuilder: (_, _) => const NoTransitionPage(child: ListingsScreen())),
+          GoRoute(path: '/app/bills', pageBuilder: (_, _) => const NoTransitionPage(child: BillsScreen())),
+          GoRoute(path: '/app/subscriptions', pageBuilder: (_, _) => const NoTransitionPage(child: SubscriptionsScreen())),
+          GoRoute(path: '/app/groceries', pageBuilder: (_, _) => const NoTransitionPage(child: GroceriesScreen())),
+          GoRoute(path: '/app/necessities', pageBuilder: (_, _) => const NoTransitionPage(child: NecessitiesScreen())),
+          GoRoute(path: '/app/cleaning', pageBuilder: (_, _) => const NoTransitionPage(child: CleaningScreen())),
+          GoRoute(path: '/app/rules', pageBuilder: (_, _) => const NoTransitionPage(child: HouseRulesScreen())),
+          GoRoute(path: '/app/parties', pageBuilder: (_, _) => const NoTransitionPage(child: PartiesScreen())),
+          GoRoute(path: '/app/messages', pageBuilder: (_, _) => const NoTransitionPage(child: MessagesScreen())),
+          GoRoute(path: '/app/issues', pageBuilder: (_, _) => const NoTransitionPage(child: IssuesScreen())),
+          GoRoute(path: '/app/complaints', pageBuilder: (_, _) => const NoTransitionPage(child: ComplaintsScreen())),
+          GoRoute(path: '/app/finance', pageBuilder: (_, _) => const NoTransitionPage(child: FinanceScreen())),
+          GoRoute(path: '/app/my-spending', pageBuilder: (_, _) => const NoTransitionPage(child: MySpendingScreen())),
+          GoRoute(path: '/app/shopping', pageBuilder: (_, s) => const NoTransitionPage(child: ShoppingListScreen())),
+          GoRoute(path: '/app/notifications', pageBuilder: (_, s) => const NoTransitionPage(child: NotificationsScreen())),
+          GoRoute(path: '/app/calendar', pageBuilder: (_, s) => const NoTransitionPage(child: CalendarScreen())),
+          GoRoute(path: '/app/maintenance', pageBuilder: (_, _) => const NoTransitionPage(child: MaintenanceContactsScreen())),
+          GoRoute(path: '/app/welcome-guide', pageBuilder: (_, _) => const NoTransitionPage(child: WelcomeGuideScreen())),
+          GoRoute(path: '/app/leaving', pageBuilder: (_, _) => const NoTransitionPage(child: LeavingScreen())),
+          GoRoute(path: '/app/terms', pageBuilder: (_, _) => const NoTransitionPage(child: TermsScreen())),
+          GoRoute(path: '/app/essentials', pageBuilder: (_, _) => const NoTransitionPage(child: EssentialsScreen())),
+          GoRoute(path: '/app/marketplace', pageBuilder: (_, _) => const NoTransitionPage(child: GoodsMarketplaceScreen())),
+          GoRoute(path: '/app/business', pageBuilder: (_, _) => const NoTransitionPage(child: BusinessDashboardScreen())),
         ],
       ),
       ShellRoute(
