@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
+// import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../state/app_state.dart';
@@ -13,7 +13,8 @@ import '../widgets/avatar.dart';
 import '../widgets/media_viewer.dart';
 import 'post_thread.dart' show threadMessages;
 
-String _pid(String prefix) => '$prefix-${Random().nextInt(0xFFFFFF).toRadixString(36)}';
+String _pid(String prefix) =>
+    '$prefix-${Random().nextInt(0xFFFFFF).toRadixString(36)}';
 
 String _clock(String iso) {
   final d = parseIso(iso);
@@ -42,7 +43,11 @@ Uint8List? _decodeBytes(Attachment a) {
 class EssentialThreadScreen extends StatefulWidget {
   final EssentialListing listing;
   final String otherUserId;
-  const EssentialThreadScreen({super.key, required this.listing, required this.otherUserId});
+  const EssentialThreadScreen({
+    super.key,
+    required this.listing,
+    required this.otherUserId,
+  });
 
   @override
   State<EssentialThreadScreen> createState() => _EssentialThreadScreenState();
@@ -62,7 +67,8 @@ class _EssentialThreadScreenState extends State<EssentialThreadScreen> {
 
   void _jumpToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollCtrl.hasClients) _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
+      if (_scrollCtrl.hasClients)
+        _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
     });
   }
 
@@ -71,56 +77,58 @@ class _EssentialThreadScreenState extends State<EssentialThreadScreen> {
     if (text.isEmpty && _pendingPhoto == null) return;
     final cu = state.currentUser!;
     state.mutate(() {
-      state.postMessages.add(PostMessage(
-        id: _pid('pm'),
-        listingId: widget.listing.id,
-        from: cu.id,
-        to: otherId,
-        text: text,
-        at: DateTime.now().toIso8601String(),
-        attachment: _pendingPhoto,
-      ));
+      state.postMessages.add(
+        PostMessage(
+          id: _pid('pm'),
+          listingId: widget.listing.id,
+          from: cu.id,
+          to: otherId,
+          text: text,
+          at: DateTime.now().toIso8601String(),
+          attachment: _pendingPhoto,
+        ),
+      );
     });
     _draftCtrl.clear();
     setState(() => _pendingPhoto = null);
     _jumpToEnd();
   }
 
-  Future<void> _pickPhoto() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
-      withData: true,
-    );
-    if (result == null || result.files.isEmpty) return;
-    final f = result.files.first;
-    if (f.bytes == null) return;
-    if (f.size > 2 * 1024 * 1024) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Image too large — keep it under 2 MB.')),
-        );
-      }
-      return;
-    }
-    final ext = (f.extension ?? '').toLowerCase();
-    final type = switch (ext) {
-      'jpg' || 'jpeg' => 'image/jpeg',
-      'png' => 'image/png',
-      'gif' => 'image/gif',
-      'webp' => 'image/webp',
-      _ => 'image/jpeg',
-    };
-    setState(() {
-      _pendingPhoto = Attachment(
-        fileName: f.name,
-        dataUrl: 'data:$type;base64,${base64Encode(f.bytes!)}',
-        type: type,
-        size: f.size,
-        uploadedAt: DateTime.now().toIso8601String(),
-      );
-    });
-  }
+  // Future<void> _pickPhoto() async {
+  //   final result = await FilePicker.platform.pickFiles(
+  //     type: FileType.custom,
+  //     allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+  //     withData: true,
+  //   );
+  //   if (result == null || result.files.isEmpty) return;
+  //   final f = result.files.first;
+  //   if (f.bytes == null) return;
+  //   if (f.size > 2 * 1024 * 1024) {
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(content: Text('Image too large — keep it under 2 MB.')),
+  //       );
+  //     }
+  //     return;
+  //   }
+  //   final ext = (f.extension ?? '').toLowerCase();
+  //   final type = switch (ext) {
+  //     'jpg' || 'jpeg' => 'image/jpeg',
+  //     'png' => 'image/png',
+  //     'gif' => 'image/gif',
+  //     'webp' => 'image/webp',
+  //     _ => 'image/jpeg',
+  //   };
+  //   setState(() {
+  //     _pendingPhoto = Attachment(
+  //       fileName: f.name,
+  //       dataUrl: 'data:$type;base64,${base64Encode(f.bytes!)}',
+  //       type: type,
+  //       size: f.size,
+  //       uploadedAt: DateTime.now().toIso8601String(),
+  //     );
+  //   });
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -129,100 +137,157 @@ class _EssentialThreadScreenState extends State<EssentialThreadScreen> {
     final posterId = widget.listing.postedBy;
     final otherId = cu.id == posterId ? widget.otherUserId : posterId;
     final other = state.findUser(otherId);
-    final messages = threadMessages(state, widget.listing.id, posterId, widget.otherUserId);
+    final messages = threadMessages(
+      state,
+      widget.listing.id,
+      posterId,
+      widget.otherUserId,
+    );
 
     _jumpToEnd();
 
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
-        title: Row(children: [
-          Avatar.sm(other),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text(other?.name ?? 'Conversation',
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
-              Text('Re: ${widget.listing.businessName}',
-                  style: const TextStyle(fontSize: 11, color: HomiesColors.textDim), overflow: TextOverflow.ellipsis),
-            ]),
-          ),
-        ]),
+        title: Row(
+          children: [
+            Avatar.sm(other),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    other?.name ?? 'Conversation',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    'Re: ${widget.listing.businessName}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: HomiesColors.textDim,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
       body: SafeArea(
-        child: Column(children: [
-          _EssentialContextBar(listing: widget.listing),
-          Expanded(
-            child: messages.isEmpty
-                ? const Center(
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.chat_bubble_outline, size: 32, color: HomiesColors.textFaint),
-                      SizedBox(height: 8),
-                      Text('No messages yet — say hi 👋', style: TextStyle(color: HomiesColors.textDim)),
-                    ]),
-                  )
-                : ListView.builder(
-                    controller: _scrollCtrl,
-                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                    itemCount: messages.length,
-                    itemBuilder: (_, i) => _MessageRow(message: messages[i], currentUser: cu, sender: state.findUser(messages[i].from)),
-                  ),
-          ),
-          Container(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-            decoration: const BoxDecoration(
-              color: HomiesColors.surface,
-              border: Border(top: BorderSide(color: HomiesColors.border)),
-            ),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              if (_pendingPhoto != null)
-                _PendingPhotoPreview(
-                  attachment: _pendingPhoto!,
-                  onRemove: () => setState(() => _pendingPhoto = null),
-                ),
-              Row(children: [
-                IconButton(
-                  icon: const Icon(Icons.photo_outlined, size: 22, color: HomiesColors.textDim),
-                  tooltip: 'Send photo',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: _pickPhoto,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: TextField(
-                    controller: _draftCtrl,
-                    textInputAction: TextInputAction.send,
-                    decoration: InputDecoration(
-                      hintText: 'Type a message…',
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      filled: true,
-                      fillColor: HomiesColors.surface2,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
+        child: Column(
+          children: [
+            _EssentialContextBar(listing: widget.listing),
+            Expanded(
+              child: messages.isEmpty
+                  ? const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.chat_bubble_outline,
+                            size: 32,
+                            color: HomiesColors.textFaint,
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'No messages yet — say hi 👋',
+                            style: TextStyle(color: HomiesColors.textDim),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: _scrollCtrl,
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                      itemCount: messages.length,
+                      itemBuilder: (_, i) => _MessageRow(
+                        message: messages[i],
+                        currentUser: cu,
+                        sender: state.findUser(messages[i].from),
                       ),
                     ),
-                    onSubmitted: (_) => _send(state, otherId),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Material(
-                  color: HomiesColors.accent,
-                  shape: const CircleBorder(),
-                  child: InkWell(
-                    customBorder: const CircleBorder(),
-                    onTap: () => _send(state, otherId),
-                    child: const Padding(
-                      padding: EdgeInsets.all(10),
-                      child: Icon(Icons.send_rounded, size: 20, color: Colors.white),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              decoration: const BoxDecoration(
+                color: HomiesColors.surface,
+                border: Border(top: BorderSide(color: HomiesColors.border)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_pendingPhoto != null)
+                    _PendingPhotoPreview(
+                      attachment: _pendingPhoto!,
+                      onRemove: () => setState(() => _pendingPhoto = null),
                     ),
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.photo_outlined,
+                          size: 22,
+                          color: HomiesColors.textDim,
+                        ),
+                        tooltip: 'Send photo',
+                        visualDensity: VisualDensity.compact,
+
+                        onPressed: () {},
+                        // onPressed: _pickPhoto,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: TextField(
+                          controller: _draftCtrl,
+                          textInputAction: TextInputAction.send,
+                          decoration: InputDecoration(
+                            hintText: 'Type a message…',
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            filled: true,
+                            fillColor: HomiesColors.surface2,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                          onSubmitted: (_) => _send(state, otherId),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Material(
+                        color: HomiesColors.accent,
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => _send(state, otherId),
+                          child: const Padding(
+                            padding: EdgeInsets.all(10),
+                            child: Icon(
+                              Icons.send_rounded,
+                              size: 20,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ]),
-            ]),
-          ),
-        ]),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -238,14 +303,23 @@ class _EssentialContextBar extends StatelessWidget {
       width: double.infinity,
       color: HomiesColors.surface2,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      child: Row(children: [
-        const Icon(Icons.storefront_outlined, size: 16, color: HomiesColors.textDim),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(listing.businessName,
-              style: const TextStyle(fontSize: 12, color: HomiesColors.textDim), overflow: TextOverflow.ellipsis),
-        ),
-      ]),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.storefront_outlined,
+            size: 16,
+            color: HomiesColors.textDim,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              listing.businessName,
+              style: const TextStyle(fontSize: 12, color: HomiesColors.textDim),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -254,7 +328,11 @@ class _MessageRow extends StatelessWidget {
   final PostMessage message;
   final User currentUser;
   final User? sender;
-  const _MessageRow({required this.message, required this.currentUser, required this.sender});
+  const _MessageRow({
+    required this.message,
+    required this.currentUser,
+    required this.sender,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -276,35 +354,67 @@ class _MessageRow extends StatelessWidget {
           color: mine ? HomiesColors.accent : HomiesColors.surface2,
           borderRadius: BorderRadius.circular(14),
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (!mine)
-            Text(sender?.name ?? '—',
-                style: const TextStyle(fontSize: 11, color: HomiesColors.textDim, fontWeight: FontWeight.w600)),
-          Text(message.text, style: TextStyle(color: mine ? Colors.white : HomiesColors.text, fontSize: 14)),
-        ]),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!mine)
+              Text(
+                sender?.name ?? '—',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: HomiesColors.textDim,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            Text(
+              message.text,
+              style: TextStyle(
+                color: mine ? Colors.white : HomiesColors.text,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
       );
     }
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start, children: [
-        Row(
-          mainAxisAlignment: align,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            if (!mine) Avatar.sm(sender),
-            if (!mine) const SizedBox(width: 6),
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.80),
-              child: content,
+      child: Column(
+        crossAxisAlignment: mine
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: align,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (!mine) Avatar.sm(sender),
+              if (!mine) const SizedBox(width: 6),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.80,
+                ),
+                child: content,
+              ),
+            ],
+          ),
+          Padding(
+            padding: EdgeInsets.only(
+              top: 2,
+              left: mine ? 0 : 32,
+              right: mine ? 2 : 0,
             ),
-          ],
-        ),
-        Padding(
-          padding: EdgeInsets.only(top: 2, left: mine ? 0 : 32, right: mine ? 2 : 0),
-          child: Text(_clock(message.at), style: const TextStyle(fontSize: 10, color: HomiesColors.textFaint)),
-        ),
-      ]),
+            child: Text(
+              _clock(message.at),
+              style: const TextStyle(
+                fontSize: 10,
+                color: HomiesColors.textFaint,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -313,32 +423,54 @@ class _MessageRow extends StatelessWidget {
 class _PendingPhotoPreview extends StatelessWidget {
   final Attachment attachment;
   final VoidCallback onRemove;
-  const _PendingPhotoPreview({required this.attachment, required this.onRemove});
+  const _PendingPhotoPreview({
+    required this.attachment,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) {
     final bytes = _decodeBytes(attachment);
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        if (bytes != null)
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.memory(bytes, width: 60, height: 60, fit: BoxFit.cover),
-          )
-        else
-          Container(
-            width: 60, height: 60,
-            decoration: BoxDecoration(color: HomiesColors.surface2, borderRadius: BorderRadius.circular(8)),
-            child: const Icon(Icons.image_outlined, color: HomiesColors.textFaint),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (bytes != null)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.memory(
+                bytes,
+                width: 60,
+                height: 60,
+                fit: BoxFit.cover,
+              ),
+            )
+          else
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: HomiesColors.surface2,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.image_outlined,
+                color: HomiesColors.textFaint,
+              ),
+            ),
+          IconButton(
+            icon: const Icon(
+              Icons.close,
+              size: 16,
+              color: HomiesColors.textDim,
+            ),
+            onPressed: onRemove,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
           ),
-        IconButton(
-          icon: const Icon(Icons.close, size: 16, color: HomiesColors.textDim),
-          onPressed: onRemove,
-          visualDensity: VisualDensity.compact,
-          padding: EdgeInsets.zero,
-        ),
-      ]),
+        ],
+      ),
     );
   }
 }
@@ -349,7 +481,12 @@ class _PhotoMessage extends StatelessWidget {
   final String text;
   final bool mine;
   final String? senderName;
-  const _PhotoMessage({required this.attachment, required this.text, required this.mine, this.senderName});
+  const _PhotoMessage({
+    required this.attachment,
+    required this.text,
+    required this.mine,
+    this.senderName,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -358,30 +495,48 @@ class _PhotoMessage extends StatelessWidget {
     final textColor = mine ? Colors.white : HomiesColors.text;
 
     return Column(
-      crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      crossAxisAlignment: mine
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
       children: [
         if (senderName != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 2, left: 2),
-            child: Text(senderName!, style: const TextStyle(fontSize: 11, color: HomiesColors.textDim, fontWeight: FontWeight.w600)),
+            child: Text(
+              senderName!,
+              style: const TextStyle(
+                fontSize: 11,
+                color: HomiesColors.textDim,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         GestureDetector(
-          onTap: bytes == null ? null : () => Navigator.of(context).push(MaterialPageRoute(
-            fullscreenDialog: true,
-            builder: (_) => FullscreenImageViewer(
-              bytes: bytes,
-              fileName: attachment.fileName,
-              mimeType: attachment.type,
-            ),
-          )),
+          onTap: bytes == null
+              ? null
+              : () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    fullscreenDialog: true,
+                    builder: (_) => FullscreenImageViewer(
+                      bytes: bytes,
+                      fileName: attachment.fileName,
+                      mimeType: attachment.type,
+                    ),
+                  ),
+                ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
             child: bytes != null
                 ? Image.memory(bytes, width: 220, fit: BoxFit.fitWidth)
                 : Container(
-                    width: 220, height: 140,
+                    width: 220,
+                    height: 140,
                     color: HomiesColors.surface2,
-                    child: const Icon(Icons.broken_image_outlined, color: HomiesColors.textFaint, size: 40),
+                    child: const Icon(
+                      Icons.broken_image_outlined,
+                      color: HomiesColors.textFaint,
+                      size: 40,
+                    ),
                   ),
           ),
         ),
@@ -389,7 +544,10 @@ class _PhotoMessage extends StatelessWidget {
           const SizedBox(height: 4),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(14),
+            ),
             child: Text(text, style: TextStyle(color: textColor, fontSize: 14)),
           ),
         ],

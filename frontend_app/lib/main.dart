@@ -40,13 +40,20 @@ void main() async {
   // a real device if it's requested before the app's UI exists, permanently
   // blocking the first frame. Run it after runApp() instead, so a stalled
   // permission prompt can never stop the app from rendering.
-  unawaited(NotificationService.init().then((_) => NotificationService.scheduleFromState(state)));
+  unawaited(
+    NotificationService.init().then(
+      (_) => NotificationService.scheduleFromState(state),
+    ),
+  );
 }
 
 Future<void> _initLocaleFirebaseAndLoadState(HomiesState state) async {
   try {
     Intl.defaultLocale = 'en_AU';
-    await initializeDateFormatting('en_AU', null).timeout(const Duration(seconds: 10));
+    await initializeDateFormatting(
+      'en_AU',
+      null,
+    ).timeout(const Duration(seconds: 10));
   } catch (e) {
     if (kDebugMode) {
       // ignore: avoid_print

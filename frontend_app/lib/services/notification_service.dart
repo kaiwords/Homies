@@ -35,21 +35,29 @@ class NotificationService {
         requestBadgePermission: true,
         requestSoundPermission: true,
       );
-      await _plugin.initialize(const InitializationSettings(android: android, iOS: ios));
+      await _plugin.initialize(
+        settings: InitializationSettings(android: android, iOS: ios),
+      );
 
       // Create Android notification channel
       await _plugin
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(const AndroidNotificationChannel(
-            _channelId,
-            _channelName,
-            description: _channelDesc,
-            importance: Importance.high,
-          ));
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
+          ?.createNotificationChannel(
+            const AndroidNotificationChannel(
+              _channelId,
+              _channelName,
+              description: _channelDesc,
+              importance: Importance.high,
+            ),
+          );
 
       // Request Android 13+ notification permission
       await _plugin
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >()
           ?.requestNotificationsPermission();
 
       _ready = true;
@@ -71,7 +79,8 @@ class NotificationService {
       if (prefs.bills) await _scheduleBills(state, cu.id, prefs.hour);
       if (prefs.chores) await _scheduleChores(state, cu.id, prefs.hour);
       if (prefs.parties) await _scheduleParties(state, prefs.hour);
-      if (prefs.essentialServices) await _scheduleEssentials(state, cu.id, prefs.hour);
+      if (prefs.essentialServices)
+        await _scheduleEssentials(state, cu.id, prefs.hour);
     } catch (_) {
       // Silent — scheduling errors must not affect app usage
     }
@@ -86,10 +95,10 @@ class NotificationService {
     if (!_ready) return;
     try {
       await _plugin.show(
-        id,
-        title,
-        body,
-        const NotificationDetails(
+        id: id,
+        title: title,
+        body: body,
+        notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             _channelId,
             _channelName,
@@ -106,7 +115,11 @@ class NotificationService {
 
   // ─── Rent ───────────────────────────────────────────────────────────────────
 
-  static Future<void> _scheduleRent(HomiesState state, String userId, int hour) async {
+  static Future<void> _scheduleRent(
+    HomiesState state,
+    String userId,
+    int hour,
+  ) async {
     final startStr = state.property.rentStartDate;
     if (startStr == null || startStr.isEmpty) return;
     final startDate = DateTime.tryParse(startStr);
@@ -131,7 +144,11 @@ class NotificationService {
 
   // ─── Bills ──────────────────────────────────────────────────────────────────
 
-  static Future<void> _scheduleBills(HomiesState state, String userId, int hour) async {
+  static Future<void> _scheduleBills(
+    HomiesState state,
+    String userId,
+    int hour,
+  ) async {
     final unpaid = state.bills
         .where((b) => !(b.paidBy[userId] ?? false) && b.dueDate.isNotEmpty)
         .toList();
@@ -151,7 +168,11 @@ class NotificationService {
 
   // ─── Chores ─────────────────────────────────────────────────────────────────
 
-  static Future<void> _scheduleChores(HomiesState state, String userId, int hour) async {
+  static Future<void> _scheduleChores(
+    HomiesState state,
+    String userId,
+    int hour,
+  ) async {
     final tasks = state.cleaningTasks
         .where((t) => !t.done && t.assignee == userId && t.dueDate.isNotEmpty)
         .toList();
@@ -171,32 +192,49 @@ class NotificationService {
 
   // ─── Essentials (recurring service bookings) ───────────────────────────────
 
-  static Future<void> _scheduleEssentials(HomiesState state, String userId, int hour) async {
+  static Future<void> _scheduleEssentials(
+    HomiesState state,
+    String userId,
+    int hour,
+  ) async {
     final myRecurring = state.essentialBookings
-        .where((b) => b.requestedBy == userId && b.status == 'confirmed' && b.frequency != null)
+        .where(
+          (b) =>
+              b.requestedBy == userId &&
+              b.status == 'confirmed' &&
+              b.frequency != null,
+        )
         .toList();
     var idOffset = 0;
     for (final booking in myRecurring) {
       if (idOffset >= 60) break; // cap total scheduled essentials reminders
       final apptDate = DateTime.tryParse(booking.date);
       if (apptDate == null) continue;
-      final listing = state.essentials.firstWhereOrNull((e) => e.id == booking.listingId);
+      final listing = state.essentials.firstWhereOrNull(
+        (e) => e.id == booking.listingId,
+      );
       if (listing == null) continue;
 
       // The reminder is for the NEXT occurrence after this appointment, not
       // the appointment itself — start the cadence search one period ahead.
       final firstReminder = _addCadence(apptDate, booking.frequency!);
-      final occurrences = _upcomingPeriods(firstReminder, booking.frequency!, 3);
+      final occurrences = _upcomingPeriods(
+        firstReminder,
+        booking.frequency!,
+        3,
+      );
       for (final date in occurrences) {
         final periodKey = _isoDate(date);
         // Skip if the client has already booked again for this occurrence or later.
-        final alreadyRebooked = state.essentialBookings.any((other) =>
-            other.id != booking.id &&
-            other.listingId == booking.listingId &&
-            other.requestedBy == userId &&
-            other.status != 'declined' &&
-            other.status != 'cancelled' &&
-            other.date.compareTo(periodKey) >= 0);
+        final alreadyRebooked = state.essentialBookings.any(
+          (other) =>
+              other.id != booking.id &&
+              other.listingId == booking.listingId &&
+              other.requestedBy == userId &&
+              other.status != 'declined' &&
+              other.status != 'cancelled' &&
+              other.date.compareTo(periodKey) >= 0,
+        );
         if (alreadyRebooked) continue;
         await _scheduleAt(
           _essentialBase + idOffset,
@@ -210,10 +248,10 @@ class NotificationService {
   }
 
   static String _frequencyWord(String frequency) => switch (frequency) {
-        'weekly' => 'weekly',
-        'fortnightly' => 'fortnightly',
-        _ => 'monthly',
-      };
+    'weekly' => 'weekly',
+    'fortnightly' => 'fortnightly',
+    _ => 'monthly',
+  };
 
   // ─── Parties ────────────────────────────────────────────────────────────────
 
@@ -236,15 +274,20 @@ class NotificationService {
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
-  static Future<void> _scheduleAt(int id, String title, String body, DateTime when) async {
+  static Future<void> _scheduleAt(
+    int id,
+    String title,
+    String body,
+    DateTime when,
+  ) async {
     if (when.isBefore(DateTime.now())) return;
     final tzWhen = tz.TZDateTime.from(when, tz.local);
     await _plugin.zonedSchedule(
-      id,
-      title,
-      body,
-      tzWhen,
-      const NotificationDetails(
+      id: id,
+      title: title,
+      body: body,
+      scheduledDate: tzWhen,
+      notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           _channelId,
           _channelName,
@@ -256,11 +299,16 @@ class NotificationService {
         iOS: DarwinNotificationDetails(),
       ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      // uiLocalNotificationDateInterpretation:
+      //     UILocalNotificationDateInterpretation.absoluteTime,
     );
   }
 
-  static List<DateTime> _upcomingPeriods(DateTime start, String cadence, int count) {
+  static List<DateTime> _upcomingPeriods(
+    DateTime start,
+    String cadence,
+    int count,
+  ) {
     final now = DateTime.now();
     final results = <DateTime>[];
     var current = start;
