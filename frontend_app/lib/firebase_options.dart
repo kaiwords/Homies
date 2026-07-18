@@ -58,17 +58,17 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyBhPDiNVG3U2mmpN-BvEkhtAxvx7eyTV-8',
-    appId: '1:451958522457:android:fe1aceca00b74a453ce748',
+    appId: '1:451958522457:android:210baefe0782d2bf3ce748',
     messagingSenderId: '451958522457',
     projectId: 'leasely-a11e4',
     storageBucket: 'leasely-a11e4.firebasestorage.app',
   );
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyA6ZxrelXUnYmhSStd9hUaBTK83MnYAI2U',
-    appId: '1:451958522457:ios:2d6298059f9a9df53ce748',
+    appId: '1:451958522457:ios:62b25f4458cce40b3ce748',
     messagingSenderId: '451958522457',
     projectId: 'leasely-a11e4',
     storageBucket: 'leasely-a11e4.firebasestorage.app',
-    iosBundleId: 'com.kai.poems',
+    iosBundleId: 'com.leasely.mobile',
   );
 }

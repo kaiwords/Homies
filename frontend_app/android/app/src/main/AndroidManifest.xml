@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Network access (Firebase, media). Declared explicitly rather than
+         relying on AAR manifest merging for the app's most critical permission. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Voice messages in chat -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <!-- Local notifications -->

@@ -12,8 +12,8 @@ workflows:
       groups:
         - ios_signing
       vars:
-        BUNDLE_ID: "com.kai.poems"
-        APP_STORE_APPLE_ID: 6781926631
+        BUNDLE_ID: "com.leasely.mobile"
+        APP_STORE_APPLE_ID: 6792280943
       flutter: stable
       xcode: latest
       cocoapods: default
@@ -80,7 +80,7 @@ workflows:
         # the keystore or these values to the repo.
         - android_signing
       vars:
-        PACKAGE_NAME: "com.kai.poems"
+        PACKAGE_NAME: "com.leasely.mobile"
       flutter: stable
 
     scripts:

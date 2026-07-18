@@ -1,4 +1,4 @@
-package com.kai.poems
+package com.leasely.mobile
 
 import io.flutter.embedding.android.FlutterActivity
 

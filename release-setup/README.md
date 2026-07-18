@@ -1,27 +1,36 @@
 # Release pipeline setup — Firebase, Apple, Codemagic
 
 This is a from-scratch, step-by-step walkthrough for getting **Leasely**
-(repo/code name `homies_mobile`, bundle id `com.kai.poems`) building and
+(repo/code name `homies_mobile`, bundle id `com.leasely.mobile`) building and
 shipping to TestFlight. It covers the three platforms you need to touch
 (Firebase console, Apple Developer / App Stor[text](vscode-webview://12ercnopgftbc11o9lkkihon7hqoqtvvf4s35hgcd0ka8l84vkbp/release-setup/README.md)e Connect, Codemagic) and
 exactly what already lives in this repo for each one, so you're not guessing
 what's done vs. missing.
 
-**Read this first:** most of this is *already configured* — this app has
-shipped TestFlight builds before under this exact bundle id. Every part below
-starts with a "confirm it already exists" step before a "create it" step —
-do the confirm step first. Don't recreate anything that already exists (a
-duplicate Firebase app, a second App Store Connect listing, a new keystore)
-— duplicates are the main way this kind of setup gets tangled.
+**⚠️ Bundle id changed:** the app id was renamed from `com.kai.poems` (a
+leftover placeholder) to **`com.leasely.mobile`**. Earlier TestFlight builds
+shipped under the OLD id `com.kai.poems`; those apply to a different app
+record and are effectively abandoned by this rename. For the new id you MUST
+create fresh Firebase apps (iOS + Android) and a new App Store Connect
+listing — the "confirm it already exists" steps below were written for the
+old id, so under `com.leasely.mobile` expect to hit the "create it" path each
+time. After registering the new Firebase apps, run `flutterfire configure`
+(or download fresh config) to regenerate `google-services.json`,
+`GoogleService-Info.plist`, and `lib/firebase_options.dart`; the Android
+build will fail until the config's package name matches `com.leasely.mobile`.
+
+**Read this next:** the keystore and Codemagic integration are reusable —
+don't create a duplicate keystore. Every part below starts with a "confirm it
+already exists" step before a "create it" step — do the confirm step first.
 
 Key identifiers you'll see reused everywhere below:
 
 | Thing | Value |
 |---|---|
 | Firebase project | `leasely-a11e4` |
-| iOS bundle id | `com.kai.poems` |
-| Android package name | `com.kai.poems` |
-| App Store Connect Apple ID (numeric) | `6781926631` |
+| iOS bundle id | `com.leasely.mobile` |
+| Android package name | `com.leasely.mobile` |
+| App Store Connect Apple ID (numeric) | `6792280943` |
 | Public app name | Leasely |
 | Codemagic App Store Connect integration name | `Leasely` |
 
@@ -50,12 +59,12 @@ push entitlement to set up anywhere in this guide.
    and open project **`leasely-a11e4`**.
 2. Click the **gear icon → Project settings**.
 3. Scroll to **Your apps**. Confirm you see three entries:
-   - An **iOS** app with bundle id `com.kai.poems`
-   - An **Android** app with package name `com.kai.poems`
+   - An **iOS** app with bundle id `com.leasely.mobile`
+   - An **Android** app with package name `com.leasely.mobile`
    - A **Web** app
-4. **If the iOS app for `com.kai.poems` is missing:**
+4. **If the iOS app for `com.leasely.mobile` is missing:**
    1. Click **Add app → iOS** (the Apple icon).
-   2. Enter bundle ID `com.kai.poems`, any nickname (e.g. "Leasely iOS"),
+   2. Enter bundle ID `com.leasely.mobile`, any nickname (e.g. "Leasely iOS"),
       leave App Store ID blank for now.
    3. Click **Register app**, then **Download `GoogleService-Info.plist`**.
    4. Replace the file at
@@ -64,15 +73,15 @@ push entitlement to set up anywhere in this guide.
    5. Click through the remaining "Add Firebase SDK" steps and press
       **Continue to console** — you don't need the code snippets, this repo
       already has the SDK wired up.
-5. **If the Android app for `com.kai.poems` is missing:**
+5. **If the Android app for `com.leasely.mobile` is missing:**
    1. Click **Add app → Android**.
-   2. Enter package name `com.kai.poems`, any nickname.
+   2. Enter package name `com.leasely.mobile`, any nickname.
    3. Click **Register app**, then **Download `google-services.json`**.
    4. Replace the file at
       [`frontend_app/android/app/google-services.json`](../frontend_app/android/app/google-services.json).
    5. Click **Continue to console**.
 6. **If both already exist** (they should — those two files already contain
-   `com.kai.poems` entries): click into each app's settings and copy its
+   `com.leasely.mobile` entries): click into each app's settings and copy its
    **App ID** (format `1:579052656220:ios:xxxxxxxx` /
    `1:579052656220:android:xxxxxxxx`). You'll cross-check these in Part D.
 7. Confirm sign-in is enabled: left sidebar **Build → Authentication →
@@ -111,12 +120,12 @@ push entitlement to set up anywhere in this guide.
 
 1. Go to [developer.apple.com/account](https://developer.apple.com/account).
 2. **Certificates, IDs & Profiles → Identifiers** (left sidebar).
-3. Search for `com.kai.poems`. If it's listed, you're done with B1.
+3. Search for `com.leasely.mobile`. If it's listed, you're done with B1.
 4. If it's not listed:
    1. Click the **+** next to Identifiers.
    2. Select **App IDs → Continue → App**.
    3. Description: "Leasely". Bundle ID: **Explicit**, enter
-      `com.kai.poems`.
+      `com.leasely.mobile`.
    4. Leave all Capabilities unchecked (this app doesn't use push, Sign in
       with Apple, or associated domains).
    5. Click **Continue → Register**.
@@ -125,19 +134,19 @@ push entitlement to set up anywhere in this guide.
 
 1. Go to [appstoreconnect.apple.com](https://appstoreconnect.apple.com) →
    **My Apps**.
-2. Look for an app whose bundle id is `com.kai.poems`. Click into it → **App
+2. Look for an app whose bundle id is `com.leasely.mobile`. Click into it → **App
    Information** (left sidebar) → check the **Apple ID** field near the top.
-   Confirm it reads `6781926631` (this is the numeric id
+   Confirm it reads `6792280943` (this is the numeric id
    `codemagic.yaml`'s `APP_STORE_APPLE_ID` refers to — not the bundle id).
 3. If no such app exists:
    1. **My Apps → the + in the top-left → New App**.
    2. Platform: **iOS**. Name: `Leasely`. Primary language: your choice.
-   3. Bundle ID: select `com.kai.poems` from the dropdown (it only appears
+   3. Bundle ID: select `com.leasely.mobile` from the dropdown (it only appears
       here after B1 is done).
    4. SKU: any unique string you won't reuse elsewhere, e.g. `leasely-ios-01`.
    5. Click **Create**.
    6. Go to **App Information** and copy the **Apple ID** it was assigned.
-      If it isn't `6781926631`, open [codemagic.yaml](../codemagic.yaml) and
+      If it isn't `6792280943`, open [codemagic.yaml](../codemagic.yaml) and
       update the `APP_STORE_APPLE_ID` value under the `ios-release` workflow
       to match.
 4. Export compliance is already handled without a manual prompt during
@@ -226,7 +235,7 @@ groups by name — both need to exist with these exact variable names:
    that exact `.jks` file and password — Play Store permanently binds a
    package name to the signing key from its first upload and will reject
    any update signed with a different key, with no way to undo it. Only run
-   this if it's a genuine first-ever upload for `com.kai.poems`:
+   this if it's a genuine first-ever upload for `com.leasely.mobile`:
    ```
    keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias <your-alias>
    ```
@@ -260,24 +269,24 @@ Everything below should already match after the fixes made earlier in this
 project — treat this as a checklist to confirm, not a to-do list to redo:
 
 1. Open [`frontend_app/ios/Runner.xcodeproj/project.pbxproj`](../frontend_app/ios/Runner.xcodeproj/project.pbxproj)
-   and confirm every `PRODUCT_BUNDLE_IDENTIFIER` is `com.kai.poems` (there
+   and confirm every `PRODUCT_BUNDLE_IDENTIFIER` is `com.leasely.mobile` (there
    are several — Debug/Release/Profile × Runner/RunnerTests).
 2. Open [`frontend_app/android/app/build.gradle.kts`](../frontend_app/android/app/build.gradle.kts)
-   and confirm `applicationId = "com.kai.poems"`.
+   and confirm `applicationId = "com.leasely.mobile"`.
 3. Open [`frontend_app/ios/Runner/GoogleService-Info.plist`](../frontend_app/ios/Runner/GoogleService-Info.plist)
-   and confirm `BUNDLE_ID` is `com.kai.poems`.
+   and confirm `BUNDLE_ID` is `com.leasely.mobile`.
 4. Open [`frontend_app/android/app/google-services.json`](../frontend_app/android/app/google-services.json)
-   and confirm there's a `client` entry with `package_name` `com.kai.poems`.
+   and confirm there's a `client` entry with `package_name` `com.leasely.mobile`.
 5. Open [`frontend_app/lib/firebase_options.dart`](../frontend_app/lib/firebase_options.dart)
    and confirm `ios.appId` matches the iOS app's App ID from Part A step 6,
-   `ios.iosBundleId` is `com.kai.poems`, and `android.appId` matches the
+   `ios.iosBundleId` is `com.leasely.mobile`, and `android.appId` matches the
    Android app's App ID — **not** the old `au.com.creyeti.*` ones.
 6. Open [`frontend_app/ios/Runner/Info.plist`](../frontend_app/ios/Runner/Info.plist)
    and confirm `CFBundleDisplayName` is `Leasely`,
    `NSLocationWhenInUseUsageDescription` is present, and
    `ITSAppUsesNonExemptEncryption` is `false`.
 7. Open [`codemagic.yaml`](../codemagic.yaml) and confirm `BUNDLE_ID` is
-   `"com.kai.poems"` and `APP_STORE_APPLE_ID` matches what you found/created
+   `"com.leasely.mobile"` and `APP_STORE_APPLE_ID` matches what you found/created
    in Part B2.
 8. Open [`frontend_app/lib/main.dart`](../frontend_app/lib/main.dart) and
    confirm the Firebase init / state load / notification setup are wrapped
@@ -293,7 +302,7 @@ dart pub global activate flutterfire_cli
 flutterfire configure --project=leasely-a11e4 --platforms=ios,android,web
 ```
 
-It detects the existing `com.kai.poems` apps in Firebase and regenerates the
+It detects the existing `com.leasely.mobile` apps in Firebase and regenerates the
 file for you — when it prompts you to select apps, pick the existing ones,
 don't let it create new ones.
 

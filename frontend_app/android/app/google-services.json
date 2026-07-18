@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:451958522457:android:fe1aceca00b74a453ce748",
+        "mobilesdk_app_id": "1:451958522457:android:210baefe0782d2bf3ce748",
         "android_client_info": {
-          "package_name": "com.kai.poems"
+          "package_name": "com.leasely.mobile"
         }
       },
       "oauth_client": [],

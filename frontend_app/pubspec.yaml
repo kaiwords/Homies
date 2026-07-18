@@ -37,6 +37,18 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
+
+# Launcher icons — generated from assets/icon/app_icon.png via:
+#   dart run flutter_launcher_icons
+# FIRST-PASS BRAND MARK: a white "L" monogram on the Leasely sage-green accent
+# (HomiesColors.accent). Replace app_icon.png with final design art and re-run
+# the generator when branding is finalised. Bundle id: com.leasely.mobile.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: "assets/icon/app_icon.png"
