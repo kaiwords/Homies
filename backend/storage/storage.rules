@@ -1,11 +1,46 @@
 rules_version = '2';
 
-// STARTER TEMPLATE — restrict to authenticated users.
-// Tighten paths/ownership for production (e.g. per-user or per-house folders).
+// Authenticated media access with upload hardening.
+//
+// The Flutter client uploads user media (images, video, audio, PDFs) but the
+// exact object-path convention is defined in the Dart client (frontend_app/),
+// which is out of scope for this change. Rather than guess a path prefix and
+// risk breaking uploads, we keep a permissive path match ({allPaths=**}) but
+// constrain *writes* by size and content-type so the bucket can't be abused as
+// free unbounded storage or a vector for arbitrary file hosting.
+//
+// SECURITY DEBT: writes are not scoped to a per-user or per-house path prefix,
+// so any authenticated user can write to (and overwrite) any object path.
+// Fixing this safely requires knowing the client's upload path convention
+// (e.g. /houses/{houseId}/... or /users/{uid}/...) and, ideally, having the
+// client namespace uploads under the caller's uid/house. That is a client
+// change (frontend_app/) and is deliberately left for a follow-up.
 service firebase.storage {
   match /b/{bucket}/o {
     match /{allPaths=**} {
-      allow read, write: if request.auth != null;
+      // Reads: any authenticated user (unchanged — preserves media viewing).
+      // NOTE: Cloud Storage rules only support the coarse `read` and `write`
+      // methods (no Firestore-style get/list/create/update/delete granularity),
+      // so upload/overwrite AND delete all fall under `write` below.
+      allow read: if request.auth != null;
+
+      // Writes: authenticated, and — for uploads/overwrites — within a sane
+      // size cap and a permitted content-type. On a delete, `request.resource`
+      // is null (there is no incoming object), so we allow it for any
+      // authenticated user rather than let the size/content-type guards reject
+      // legitimate media cleanup the original starter rule permitted.
+      allow write: if request.auth != null && (
+        request.resource == null // delete: no incoming object to constrain
+        || (
+          request.resource.size < 10 * 1024 * 1024 // 10 MB cap
+          && (
+            request.resource.contentType.matches('image/.*') ||
+            request.resource.contentType.matches('video/.*') ||
+            request.resource.contentType.matches('audio/.*') ||
+            request.resource.contentType == 'application/pdf'
+          )
+        )
+      );
     }
   }
 }

@@ -11,11 +11,23 @@ service cloud.firestore {
     }
 
     // A signed-in user may read/create/update their own profile document, but
-    // may never change their own `role` (this is what stops a plain user
-    // from self-granting admin via a raw Firestore write, bypassing the
-    // app's UI entirely). Admins may read, list, create, update, or delete
-    // any user's document — this is how the admin console manages accounts
-    // and creates other admins.
+    // may never change any privileged field on it via a raw Firestore write
+    // that bypasses the app's UI. The protected set is:
+    //   - role             (self-granting admin / changing account type)
+    //   - leaseVerification (self-approving one's own lease verification)
+    //   - member / pending  (self-flipping membership / pending status)
+    //   - houseId           (attaching oneself to an arbitrary house)
+    // A legitimate self-edit (name, phone, lifestyle, sharing flags, etc.) is
+    // still allowed because it doesn't touch any of those keys.
+    //
+    // We use diff().affectedKeys().hasAny(...) rather than per-field `==`
+    // guards so that fields which are simply ABSENT from the profile (never
+    // set) don't cause a false reject: affectedKeys() only lists keys that
+    // were added, removed, or changed, so an untouched/absent protected field
+    // never appears there.
+    //
+    // Admins retain full read/list/create/update/delete on any user document —
+    // this is how the admin console manages accounts and creates other admins.
     match /users/{uid} {
       allow get: if request.auth != null && (request.auth.uid == uid || isAdmin());
       allow list: if isAdmin();
@@ -23,7 +35,12 @@ service cloud.firestore {
         (request.auth.uid == uid && request.resource.data.role in ['tenant', 'leaseholder', 'business']) || isAdmin()
       );
       allow update: if request.auth != null && (
-        (request.auth.uid == uid && request.resource.data.role == resource.data.role) || isAdmin()
+        isAdmin() ||
+        (
+          request.auth.uid == uid &&
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['role', 'leaseVerification', 'member', 'pending', 'houseId'])
+        )
       );
       allow delete: if isAdmin();
     }
@@ -33,6 +50,24 @@ service cloud.firestore {
     // (and only themselves) to `members`, via arrayUnion, touching no other
     // field — this is how invite redemption lets a brand-new user join
     // before they're technically a member yet.
+    //
+    // SECURITY DEBT (self-join has no invite check): the non-member update
+    // branch lets ANY authenticated user add themselves to ANY house's
+    // `members` array without presenting a valid invite. It can't be fixed in
+    // rules alone today because invites are keyed by their random `code`, not
+    // by the joiner's uid, so a rule evaluating houses/{houseId} has no way to
+    // look up "does an unaccepted invite for this uid+house exist?" without a
+    // deterministic lookup key. Proper fix (client change, frontend_app/):
+    // key invite acceptance so a rule can `get` an invite doc keyed by
+    // {houseId}_{uid} (or store the accepted uid on the invite) and require it
+    // to exist and match before allowing the arrayUnion self-add.
+    //
+    // SECURITY DEBT (no intra-member least privilege): every member can
+    // read/write the ENTIRE house doc wholesale, so any member can tamper with
+    // any other member's data or house-wide fields. This is inherent to the
+    // current single-shared-document sync model and cannot be tightened
+    // without splitting the house into per-record subcollections with
+    // per-field ownership — a client re-architecture that is out of scope.
     match /houses/{houseId} {
       allow read: if request.auth != null && request.auth.uid in resource.data.members;
       allow create: if request.auth != null && request.auth.uid in request.resource.data.members;
@@ -48,12 +83,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Invite codes. Any signed-in user may read one (needed to look up a
-    // code before they're a house member). Only the creator may create one,
-    // and after creation only its `status` field may ever change (accepting
-    // it), so a redeemer can't rewrite which house/email/role it points to.
+    // Invite codes. A redeemer looks an invite up by its EXACT document id
+    // (joinHouseByCode reads invites/{code}), so a single-document `get` is all
+    // the client needs. We deliberately grant `get` but NOT `list`: `allow
+    // read` previously granted both, which let any signed-in user enumerate the
+    // entire invites collection and harvest every houseId plus the invitee
+    // email/phone/role on each code. Restricting to `get` closes that leak
+    // without breaking redemption (which never queries/lists — it fetches one
+    // known code). `list` is granted to admins only for the admin console.
+    // Only the creator may create an invite, and after creation only its
+    // `status` field may ever change (accepting it), so a redeemer can't
+    // rewrite which house/email/role it points to.
     match /invites/{code} {
-      allow read: if request.auth != null;
+      allow get: if request.auth != null;
+      allow list: if isAdmin();
       allow create: if request.auth != null && request.resource.data.createdBy == request.auth.uid;
       allow update: if request.auth != null &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
@@ -66,6 +109,16 @@ service cloud.firestore {
     // across all houses and to browsers with no house yet. No membership
     // concept to gate against, so any signed-in user may read/write the
     // whole doc, the same way the house doc is a single shared document.
+    //
+    // SECURITY DEBT (single world-writable doc): because the entire community
+    // dataset lives in ONE document that every signed-in user reads and writes
+    // wholesale, any user can overwrite or delete all listings, chats,
+    // bookings, and notifications for everyone in a single write — there is no
+    // per-record ownership to enforce. This cannot be fixed in rules alone
+    // while the client uses the single-shared-document sync model. Proper fix
+    // (client change, frontend_app/): split community/global into per-record
+    // documents in subcollections (e.g. community/listings/{id}) carrying a
+    // creator/owner uid, then gate write/delete on ownership in rules.
     match /community/global {
       allow read, write: if request.auth != null;
     }
