@@ -1,7 +1,7 @@
 import './Landing.css'
 
 // ── Update this once your App Store listing is live ──────────────────────────
-const APP_STORE_URL = 'https://apps.apple.com/app/id6781926631'
+const APP_STORE_URL = 'https://apps.apple.com/app/id6792280943'
 
 const FEATURES = [
   {
