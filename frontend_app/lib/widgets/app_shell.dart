@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -557,17 +558,27 @@ class _SettingsSheet extends StatelessWidget {
               context.go('/app/terms');
             },
           ),
+          _SettingsTile(
+            icon: Icons.privacy_tip_outlined,
+            label: 'Privacy policy & terms',
+            onTap: () {
+              Navigator.pop(context);
+              context.push('/legal');
+            },
+          ),
 
           Container(height: 1, color: HomiesColors.border),
 
-          _SettingsTile(
-            icon: Icons.swap_horiz_rounded,
-            label: 'Switch demo account',
-            onTap: () {
-              Navigator.pop(context);
-              context.push('/demo');
-            },
-          ),
+          // Demo account switching is a debug-only convenience — compiled out of release builds.
+          if (kDebugMode)
+            _SettingsTile(
+              icon: Icons.swap_horiz_rounded,
+              label: 'Switch demo account',
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/demo');
+              },
+            ),
           _SettingsTile(
             icon: Icons.logout_rounded,
             label: 'Sign out',
@@ -578,10 +589,136 @@ class _SettingsSheet extends StatelessWidget {
               if (context.mounted) context.go('/login');
             },
           ),
+          _SettingsTile(
+            icon: Icons.delete_forever_outlined,
+            label: 'Delete account',
+            color: HomiesColors.danger,
+            onTap: () async {
+              final deleted = await showDialog<bool>(
+                context: context,
+                barrierDismissible: false,
+                builder: (_) => const _DeleteAccountDialog(),
+              );
+              if (deleted == true && context.mounted) {
+                Navigator.pop(context); // close the settings sheet
+                context.go('/login');
+              }
+            },
+          ),
 
           const SizedBox(height: 16),
         ],
       ),
+    );
+  }
+}
+
+// ─── Delete account (confirmation + reauth) ──────────────────────────────────
+//
+// Apple Guideline 5.1.1(v): apps that let users create an account must let them
+// initiate account deletion from within the app. Firebase requires a recent
+// login before deletion, so real accounts must re-enter their password here;
+// demo / local-only sessions skip the password entirely.
+
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  final _passCtrl = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _confirm(HomiesState state, {required bool needsPassword}) async {
+    if (needsPassword && _passCtrl.text.isEmpty) {
+      setState(() => _error = 'Enter your password to confirm.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final result = await state.deleteAccount(_passCtrl.text);
+    if (!mounted) return;
+    if (result.ok) {
+      Navigator.pop(context, true);
+    } else {
+      setState(() {
+        _busy = false;
+        _error = result.error ?? 'Could not delete your account.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = HomiesScope.of(context);
+    final needsPassword = state.hasFirebaseAccount;
+
+    return AlertDialog(
+      title: const Text('Delete account'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'This permanently deletes your account. This cannot be undone.',
+            style: TextStyle(fontSize: 14, height: 1.5),
+          ),
+          const SizedBox(height: 10),
+          const Text('This removes:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          ...const [
+            'Your sign-in and profile details',
+            'Your membership of your current house',
+            'Your saved reminders and preferences on this device',
+          ].map((t) => Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Text('•  $t', style: const TextStyle(fontSize: 13, height: 1.4, color: HomiesColors.textDim)),
+              )),
+          if (needsPassword) ...[
+            const SizedBox(height: 14),
+            const Text(
+              'Re-enter your password to confirm.',
+              style: TextStyle(fontSize: 13, color: HomiesColors.textDim),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _passCtrl,
+              obscureText: true,
+              enabled: !_busy,
+              decoration: const InputDecoration(hintText: 'Password'),
+              onSubmitted: (_) => _busy ? null : _confirm(state, needsPassword: needsPassword),
+            ),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            Text(_error!, style: const TextStyle(fontSize: 13, color: HomiesColors.danger)),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: _busy ? null : () => _confirm(state, needsPassword: needsPassword),
+          style: TextButton.styleFrom(foregroundColor: HomiesColors.danger),
+          child: _busy
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Delete account'),
+        ),
+      ],
     );
   }
 }

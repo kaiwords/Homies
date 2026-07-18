@@ -76,9 +76,16 @@ class HomiesState extends ChangeNotifier {
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _houseSub;
   String? _syncedHouseId;
   bool _applyingRemoteHouse = false;
+  // True once the first remote snapshot for the current house has been
+  // received and applied (or observed absent). Until then we must NOT push
+  // local/seed state up, or a freshly-joined / fresh-device user would clobber
+  // the real house doc with local data before ever seeing it.
+  bool _houseSnapshotApplied = false;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _globalSub;
   bool _globalSyncing = false;
   bool _applyingRemoteGlobal = false;
+  // Same first-snapshot guard as _houseSnapshotApplied, but for community/global.
+  bool _globalSnapshotApplied = false;
 
   // Every real account, admin-only (authorized by the isAdmin() Firestore
   // rule) — session-only, not part of the persisted local-storage blob.
@@ -417,6 +424,106 @@ class HomiesState extends ChangeNotifier {
     });
   }
 
+  /// True when the active session is backed by a real Firebase Auth user
+  /// (email/password sign-up), as opposed to a demo / local-only session
+  /// created via [signInAs]. Used by the settings UI to decide whether the
+  /// delete-account flow needs to re-authenticate with a password.
+  bool get hasFirebaseAccount => fb.FirebaseAuth.instance.currentUser != null;
+
+  /// Stops all remote sync, signs out of Firebase, drops the persisted
+  /// local-storage blob, and clears the session so the router bounces back to
+  /// the welcome/login screen. Deliberately does NOT go through [mutate] — that
+  /// would immediately re-persist a fresh seed blob and re-write the key we
+  /// just removed.
+  Future<void> _clearLocalSessionState() async {
+    stopHouseSync();
+    stopGlobalSync();
+    try {
+      await fb.FirebaseAuth.instance.signOut();
+    } catch (_) {
+      // Already signed out (e.g. right after user.delete()) — ignore.
+    }
+    session = Session();
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_storageKey);
+  }
+
+  /// User-initiated permanent account deletion (Apple Guideline 5.1.1(v)).
+  ///
+  /// For a real Firebase account this re-authenticates with [password]
+  /// (Firebase requires a recent login before deletion), removes the user from
+  /// their house's members array, deletes their `users/{uid}` profile doc,
+  /// deletes the Firebase Auth login, then clears all local state. Firestore
+  /// work happens BEFORE `user.delete()` because once the Auth user is gone the
+  /// client is no longer authorized to write those docs.
+  ///
+  /// Demo / local-only sessions (no real Firebase user) simply clear local
+  /// state and sign out without touching Firebase.
+  ///
+  /// Errors (wrong password, requires-recent-login, network) are returned as a
+  /// failure [AuthResult] with a user-friendly message — this never throws.
+  Future<AuthResult> deleteAccount(String password) async {
+    final fbUser = fb.FirebaseAuth.instance.currentUser;
+
+    // Demo / local-only session — nothing to delete on the server.
+    if (fbUser == null) {
+      await _clearLocalSessionState();
+      return const AuthResult.success();
+    }
+
+    try {
+      final email = fbUser.email;
+      if (email == null || email.isEmpty) {
+        return const AuthResult.failure(
+            "This account has no email on file, so it can't be verified for deletion. Please contact support.");
+      }
+
+      // Firebase requires a recent login to delete an account — re-authenticate.
+      final cred = fb.EmailAuthProvider.credential(email: email, password: password);
+      await fbUser.reauthenticateWithCredential(cred);
+
+      final uid = fbUser.uid;
+      final hid = houseId;
+
+      // (b) Remove this uid from their house's members array, if any. Best
+      // effort — a failure here must not block deleting the account itself.
+      if (hid != null) {
+        try {
+          await FirebaseFirestore.instance.collection('houses').doc(hid).update({
+            'members': FieldValue.arrayRemove([uid]),
+          });
+        } catch (e) {
+          if (kDebugMode) {
+            // ignore: avoid_print
+            print('deleteAccount: failed to remove from house members: $e');
+          }
+        }
+      }
+
+      // (a) Delete the user's profile doc.
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(uid).delete();
+      } catch (e) {
+        if (kDebugMode) {
+          // ignore: avoid_print
+          print('deleteAccount: failed to delete user doc: $e');
+        }
+      }
+
+      // (c) Delete the Firebase Auth login. After this the client is signed out.
+      await fbUser.delete();
+
+      // (d) Clear local persisted state and reset the session.
+      await _clearLocalSessionState();
+      return const AuthResult.success();
+    } on fb.FirebaseAuthException catch (e) {
+      return AuthResult.failure(_authErrorMessage(e));
+    } catch (e) {
+      return AuthResult.failure('Failed to delete account: $e');
+    }
+  }
+
   String _authErrorMessage(fb.FirebaseAuthException e) {
     switch (e.code) {
       case 'email-already-in-use':
@@ -429,6 +536,8 @@ class HomiesState extends ChangeNotifier {
       case 'wrong-password':
       case 'invalid-credential':
         return 'Email or password is incorrect.';
+      case 'requires-recent-login':
+        return 'For security, please sign out and sign back in, then try deleting your account again.';
       case 'too-many-requests':
         return 'Too many attempts — wait a moment and try again.';
       case 'network-request-failed':
@@ -461,6 +570,10 @@ class HomiesState extends ChangeNotifier {
     if (_applyingRemoteHouse) return; // this write originated from the listener itself — skip
     final id = houseId;
     if (id == null) return; // no house yet — pure local persistence, unchanged behavior
+    // Do NOT push until we've seen the first remote snapshot for this house —
+    // otherwise a freshly-joined / fresh-device user overwrites the real doc
+    // with local SEED data before it's ever loaded.
+    if (!_houseSnapshotApplied) return;
     FirebaseFirestore.instance.collection('houses').doc(id).set({
       ..._sharedFieldsJson(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -479,16 +592,29 @@ class HomiesState extends ChangeNotifier {
     if (_syncedHouseId == id && _houseSub != null) return;
     _houseSub?.cancel();
     _syncedHouseId = id;
+    _houseSnapshotApplied = false; // block pushes until the first snapshot lands
     _houseSub = FirebaseFirestore.instance.collection('houses').doc(id).snapshots().listen(
       (snap) {
         if (snap.metadata.hasPendingWrites) return; // optimistic echo of our own write
         final data = snap.data();
-        if (data == null) return;
+        if (data == null) {
+          // Snapshot received, doc absent — this client is free to create it
+          // (e.g. the very first write of a brand-new house). Unblock pushes.
+          _houseSnapshotApplied = true;
+          return;
+        }
         _applyingRemoteHouse = true;
         try {
           _applySharedFieldsFromJson(data);
+          _houseSnapshotApplied = true;
           notifyListeners();
           _persist();
+        } catch (e) {
+          // A single malformed doc must not kill the sync — skip and survive.
+          if (kDebugMode) {
+            // ignore: avoid_print
+            print('Skipping malformed house snapshot: $e');
+          }
         } finally {
           _applyingRemoteHouse = false;
         }
@@ -512,6 +638,9 @@ class HomiesState extends ChangeNotifier {
     // before startGlobalSync() has run) would attempt to push local/seed
     // data into the real shared marketplace doc on every mutate().
     if (_applyingRemoteGlobal || !_globalSyncing) return;
+    // Same first-snapshot guard as the house push: don't overwrite the shared
+    // community doc with local/seed data before the real one has been applied.
+    if (!_globalSnapshotApplied) return;
     FirebaseFirestore.instance.collection('community').doc('global').set({
       ..._globalFieldsJson(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -531,17 +660,29 @@ class HomiesState extends ChangeNotifier {
     if (_globalSyncing && _globalSub != null) return;
     _globalSub?.cancel();
     _globalSyncing = true;
+    _globalSnapshotApplied = false; // block pushes until the first snapshot lands
     _globalSub = FirebaseFirestore.instance.collection('community').doc('global').snapshots().listen(
       (snap) {
         if (snap.metadata.hasPendingWrites) return;
         final data = snap.data();
-        if (data == null) return;
+        if (data == null) {
+          // Snapshot received, doc absent — first write may legitimately create it.
+          _globalSnapshotApplied = true;
+          return;
+        }
         _applyingRemoteGlobal = true;
         try {
           _applyGlobalFieldsFromJson(data);
+          _globalSnapshotApplied = true;
           notifyListeners();
           _persist();
           _maybeAutoJoinFromAcceptedInterest();
+        } catch (e) {
+          // A single malformed doc must not kill the sync — skip and survive.
+          if (kDebugMode) {
+            // ignore: avoid_print
+            print('Skipping malformed global snapshot: $e');
+          }
         } finally {
           _applyingRemoteGlobal = false;
         }
@@ -559,12 +700,14 @@ class HomiesState extends ChangeNotifier {
     _globalSub?.cancel();
     _globalSub = null;
     _globalSyncing = false;
+    _globalSnapshotApplied = false;
   }
 
   void stopHouseSync() {
     _houseSub?.cancel();
     _houseSub = null;
     _syncedHouseId = null;
+    _houseSnapshotApplied = false;
   }
 
   String _hid() => 'h-${Random().nextInt(0xFFFFFF).toRadixString(36)}';

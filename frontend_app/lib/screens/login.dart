@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -89,12 +90,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 10),
                   TextButton(onPressed: () => context.push('/signup'), child: const Text('New here? Create an account')),
-                  const Divider(height: 24),
-                  OutlinedButton.icon(
-                    onPressed: () => context.push('/demo'),
-                    icon: const Icon(Icons.bolt_rounded, size: 18),
-                    label: const Text('Try demo accounts'),
-                  ),
+                  // Demo accounts are a debug-only convenience — compiled out of release builds.
+                  if (kDebugMode) ...[
+                    const Divider(height: 24),
+                    OutlinedButton.icon(
+                      onPressed: () => context.push('/demo'),
+                      icon: const Icon(Icons.bolt_rounded, size: 18),
+                      label: const Text('Try demo accounts'),
+                    ),
+                  ],
                   TextButton(onPressed: () => context.go('/'), child: const Text('Back')),
                 ]),
               ),

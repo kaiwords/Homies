@@ -276,6 +276,17 @@ class _SignupScreenState extends State<SignupScreen> {
               : const Text('Create account →'),
         ),
       ]),
+      const SizedBox(height: 8),
+      Center(
+        child: TextButton(
+          onPressed: () => context.push('/legal'),
+          child: const Text(
+            'By creating an account you agree to our Privacy Policy & Terms',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: HomiesColors.textDim),
+          ),
+        ),
+      ),
     ]);
   }
 }

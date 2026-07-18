@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -16,9 +17,22 @@ class AcceptInviteScreen extends StatefulWidget {
 }
 
 class _AcceptInviteScreenState extends State<AcceptInviteScreen> {
-  late final Future<DocumentSnapshot<Map<String, dynamic>>> _future =
-      FirebaseFirestore.instance.collection('invites').doc(widget.code).get();
+  late final Future<DocumentSnapshot<Map<String, dynamic>>> _future = _loadInvite();
   bool _accepting = false;
+
+  /// Firebase.initializeApp() runs in the background after runApp (main.dart),
+  /// so on a cold-start deep link the default app may not exist yet. Touching
+  /// FirebaseFirestore.instance before then throws [core/no-app] — wait for the
+  /// default app to appear (surfacing as the FutureBuilder's loading spinner)
+  /// before reading the invite.
+  Future<DocumentSnapshot<Map<String, dynamic>>> _loadInvite() async {
+    var attempts = 0;
+    while (Firebase.apps.isEmpty && attempts < 50) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      attempts++;
+    }
+    return FirebaseFirestore.instance.collection('invites').doc(widget.code).get();
+  }
 
   Future<void> _acceptAsExistingUser(HomiesState state, String role) async {
     setState(() => _accepting = true);

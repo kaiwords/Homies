@@ -20,18 +20,22 @@ class AdminVerificationsScreen extends StatefulWidget {
 
 class _AdminVerificationsScreenState extends State<AdminVerificationsScreen> {
   bool _syncStarted = false;
+  // Captured while the widget is still in the tree — an inherited-widget lookup
+  // in dispose() throws, so we save the reference here and reuse it.
+  HomiesState? _state;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _state = HomiesScope.of(context);
     if (_syncStarted) return;
     _syncStarted = true;
-    HomiesScope.of(context).startAdminUsersSync();
+    _state!.startAdminUsersSync();
   }
 
   @override
   void dispose() {
-    HomiesScope.of(context).stopAdminUsersSync();
+    _state?.stopAdminUsersSync();
     super.dispose();
   }
 

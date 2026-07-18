@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
@@ -20,6 +21,7 @@ import 'screens/housemates.dart';
 import 'screens/issues.dart';
 import 'screens/leaseholder_onboarding.dart';
 import 'screens/leaving.dart';
+import 'screens/legal.dart';
 import 'screens/listings.dart';
 import 'screens/login.dart';
 import 'screens/marketplace.dart';
@@ -144,7 +146,9 @@ GoRouter buildRouter(HomiesState state) {
     routes: [
       GoRoute(path: '/', builder: (_, _) => const WelcomeScreen()),
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
-      GoRoute(path: '/demo', builder: (_, _) => const DemoLoginScreen()),
+      // Demo login is a debug-only convenience — compiled out of release builds
+      // so it can't be used as a backdoor into the app.
+      if (kDebugMode) GoRoute(path: '/demo', builder: (_, _) => const DemoLoginScreen()),
       GoRoute(
         path: '/signup',
         builder: (_, s) {
@@ -153,6 +157,10 @@ GoRouter buildRouter(HomiesState state) {
         },
       ),
       GoRoute(path: '/invite/:code', builder: (_, s) => AcceptInviteScreen(code: s.pathParameters['code']!)),
+      // Privacy Policy + Terms of Service. A normal (non-debug) top-level route
+      // so it's reachable both before sign-in (from signup) and from settings,
+      // and can be surfaced in store metadata.
+      GoRoute(path: '/legal', builder: (_, _) => const LegalScreen()),
       GoRoute(path: '/onboarding/leaseholder', builder: (_, _) => const LeaseholderOnboardingScreen()),
       GoRoute(path: '/onboarding/tenant', builder: (_, _) => const TenantOnboardingScreen()),
       ShellRoute(

@@ -1107,6 +1107,11 @@ class _PaymentSheetState extends State<_PaymentSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // Subscribe to state so the sheet rebuilds after onMarkPaid / onUndo call
+    // notifyListeners() — the paidBy/payments maps we render are live
+    // references to the model, so a rebuild reflects the change immediately.
+    // (Matches the pattern in bills.dart's _ShareRow.)
+    final state = HomiesScope.of(context);
     final isPayer = widget.cu.id == widget.payer;
     final canEditDate = isPayer && widget.onUpdateDueDate != null;
 
@@ -1158,7 +1163,7 @@ class _PaymentSheetState extends State<_PaymentSheet> {
               paidBy: widget.paidBy,
               payments: widget.payments,
               cu: widget.cu,
-              state: widget.state,
+              state: state,
               onMarkPaid: widget.onMarkPaid,
               onUndo: widget.onUndo,
             ),

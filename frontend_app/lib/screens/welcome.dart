@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -26,7 +27,7 @@ class WelcomeScreen extends StatelessWidget {
                   const _BrandBar(),
                   const SizedBox(height: 20),
                   _Hero(signedIn: signedIn, state: state),
-                  if (!signedIn) ...[
+                  if (!signedIn && kDebugMode) ...[
                     const SizedBox(height: 12),
                     _DemoBanner(onTap: () => context.push('/demo')),
                   ],

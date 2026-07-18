@@ -379,10 +379,10 @@ class User {
       };
 
   factory User.fromJson(Map<String, dynamic> j) => User(
-        id: j['id'] as String,
-        name: j['name'] as String,
-        initials: j['initials'] as String,
-        role: j['role'] as String,
+        id: (j['id'] ?? '') as String,
+        name: (j['name'] ?? '') as String,
+        initials: (j['initials'] ?? '') as String,
+        role: (j['role'] ?? 'tenant') as String,
         email: (j['email'] ?? '') as String,
         phone: (j['phone'] ?? '') as String,
         moveInDate: j['moveInDate'] as String?,
@@ -514,7 +514,7 @@ class Property {
       };
 
   factory Property.fromJson(Map<String, dynamic> j) => Property(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         address: (j['address'] ?? '') as String,
         type: (j['type'] ?? 'House') as String,
         bedrooms: ((j['bedrooms'] ?? 1) as num).toInt(),
@@ -563,7 +563,7 @@ class Invite {
   Map<String, dynamic> toJson() =>
       {'code': code, 'email': email, 'phone': phone, 'method': method, 'role': role, 'sentAt': sentAt, 'status': status};
   factory Invite.fromJson(Map<String, dynamic> j) => Invite(
-        code: j['code'] as String,
+        code: (j['code'] ?? '') as String,
         email: j['email'] as String?,
         phone: j['phone'] as String?,
         // Older invites predate the `method` field — infer it from whichever
@@ -572,8 +572,8 @@ class Invite {
             (((j['email'] as String?)?.isNotEmpty ?? false)
                 ? 'email'
                 : (((j['phone'] as String?)?.isNotEmpty ?? false) ? 'phone' : 'social')),
-        role: j['role'] as String,
-        sentAt: j['sentAt'] as String,
+        role: (j['role'] ?? '') as String,
+        sentAt: (j['sentAt'] ?? '') as String,
         status: (j['status'] ?? 'sent') as String,
       );
 }
@@ -586,10 +586,10 @@ class HouseRule {
   HouseRule({required this.id, required this.text, required this.addedBy, required this.addedAt});
   Map<String, dynamic> toJson() => {'id': id, 'text': text, 'addedBy': addedBy, 'addedAt': addedAt};
   factory HouseRule.fromJson(Map<String, dynamic> j) => HouseRule(
-        id: j['id'] as String,
-        text: j['text'] as String,
-        addedBy: j['addedBy'] as String,
-        addedAt: j['addedAt'] as String,
+        id: (j['id'] ?? '') as String,
+        text: (j['text'] ?? '') as String,
+        addedBy: (j['addedBy'] ?? '') as String,
+        addedAt: (j['addedAt'] ?? '') as String,
       );
 }
 
@@ -686,8 +686,8 @@ class Bill {
       };
 
   factory Bill.fromJson(Map<String, dynamic> j) => Bill(
-        id: j['id'] as String,
-        title: j['title'] as String,
+        id: (j['id'] ?? '') as String,
+        title: (j['title'] ?? '') as String,
         category: (j['category'] ?? 'other') as String,
         amount: ((j['amount'] ?? 0) as num).toDouble(),
         periodStart: j['periodStart'] as String?,
@@ -751,8 +751,8 @@ class BillSchedule {
       };
 
   factory BillSchedule.fromJson(Map<String, dynamic> j) => BillSchedule(
-        id: j['id'] as String,
-        title: j['title'] as String,
+        id: (j['id'] ?? '') as String,
+        title: (j['title'] ?? '') as String,
         category: (j['category'] ?? 'other') as String,
         cadence: (j['cadence'] ?? 'monthly') as String,
         customDays: (j['customDays'] as num?)?.toInt(),
@@ -809,8 +809,8 @@ class Subscription {
       };
 
   factory Subscription.fromJson(Map<String, dynamic> j) => Subscription(
-        id: j['id'] as String,
-        name: j['name'] as String,
+        id: (j['id'] ?? '') as String,
+        name: (j['name'] ?? '') as String,
         amount: ((j['amount'] ?? 0) as num).toDouble(),
         cadence: (j['cadence'] ?? 'monthly') as String,
         payer: (j['payer'] ?? '') as String,
@@ -869,8 +869,8 @@ class Necessity {
       };
 
   factory Necessity.fromJson(Map<String, dynamic> j) => Necessity(
-        id: j['id'] as String,
-        item: j['item'] as String,
+        id: (j['id'] ?? '') as String,
+        item: (j['item'] ?? '') as String,
         mode: (j['mode'] ?? 'shared') as String,
         payer: (j['payer'] ?? '') as String,
         amount: ((j['amount'] ?? 0) as num).toDouble(),
@@ -927,8 +927,8 @@ class Grocery {
       };
 
   factory Grocery.fromJson(Map<String, dynamic> j) => Grocery(
-        id: j['id'] as String,
-        title: j['title'] as String,
+        id: (j['id'] ?? '') as String,
+        title: (j['title'] ?? '') as String,
         total: ((j['total'] ?? 0) as num).toDouble(),
         payer: (j['payer'] ?? '') as String,
         mode: (j['mode'] ?? 'shared') as String,
@@ -949,7 +949,7 @@ class CleaningRosterEntry {
   CleaningRosterEntry({required this.day, required this.area, required this.assignee});
   Map<String, dynamic> toJson() => {'day': day, 'area': area, 'assignee': assignee};
   factory CleaningRosterEntry.fromJson(Map<String, dynamic> j) => CleaningRosterEntry(
-        day: j['day'] as String,
+        day: (j['day'] ?? '') as String,
         area: (j['area'] ?? '') as String,
         assignee: (j['assignee'] ?? '') as String,
       );
@@ -990,8 +990,8 @@ class CleaningTask {
         'completedAt': completedAt,
       };
   factory CleaningTask.fromJson(Map<String, dynamic> j) => CleaningTask(
-        id: j['id'] as String,
-        task: j['task'] as String,
+        id: (j['id'] ?? '') as String,
+        task: (j['task'] ?? '') as String,
         assignee: (j['assignee'] ?? '') as String,
         dueDate: (j['dueDate'] ?? '') as String,
         done: (j['done'] ?? false) as bool,
@@ -1012,9 +1012,9 @@ class CleaningDayAvailability {
   Map<String, dynamic> toJson() => {'userId': userId, 'day': day, 'status': status};
 
   factory CleaningDayAvailability.fromJson(Map<String, dynamic> j) => CleaningDayAvailability(
-        userId: j['userId'] as String,
-        day: j['day'] as String,
-        status: j['status'] as String,
+        userId: (j['userId'] ?? '') as String,
+        day: (j['day'] ?? '') as String,
+        status: (j['status'] ?? '') as String,
       );
 }
 
@@ -1054,7 +1054,7 @@ class MaintenanceContact {
 
   factory MaintenanceContact.fromJson(Map<String, dynamic> j) =>
       MaintenanceContact(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         name: (j['name'] ?? '') as String,
         category: (j['category'] ?? 'other') as String,
         phone: j['phone'] as String?,
@@ -1088,7 +1088,7 @@ class WelcomeSection {
       };
 
   factory WelcomeSection.fromJson(Map<String, dynamic> j) => WelcomeSection(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         icon: (j['icon'] ?? '') as String,
         title: (j['title'] ?? '') as String,
         content: (j['content'] ?? '') as String,
@@ -1168,7 +1168,7 @@ class ChoreSwapRequest {
       };
 
   factory ChoreSwapRequest.fromJson(Map<String, dynamic> j) => ChoreSwapRequest(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         taskId: j['taskId'] as String?,
         rosterDay: j['rosterDay'] as String?,
         wantedDay: j['wantedDay'] as String?,
@@ -1212,7 +1212,7 @@ class RentShare {
       };
 
   factory RentShare.fromJson(Map<String, dynamic> j) => RentShare(
-        userId: j['userId'] as String,
+        userId: (j['userId'] ?? '') as String,
         amount: ((j['amount'] ?? 0) as num).toDouble(),
         hasParking: (j['hasParking'] ?? false) as bool,
         hasBalcony: (j['hasBalcony'] ?? false) as bool,
@@ -1253,8 +1253,8 @@ class Party {
         'status': status,
       };
   factory Party.fromJson(Map<String, dynamic> j) => Party(
-        id: j['id'] as String,
-        title: j['title'] as String,
+        id: (j['id'] ?? '') as String,
+        title: (j['title'] ?? '') as String,
         date: (j['date'] ?? '') as String,
         time: (j['time'] ?? '') as String,
         host: (j['host'] ?? '') as String,
@@ -1271,7 +1271,7 @@ class PollOption {
   PollOption({required this.id, required this.text, required this.addedBy});
   Map<String, dynamic> toJson() => {'id': id, 'text': text, 'addedBy': addedBy};
   factory PollOption.fromJson(Map<String, dynamic> j) => PollOption(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         text: (j['text'] ?? '') as String,
         addedBy: (j['addedBy'] ?? '') as String,
       );
@@ -1347,10 +1347,10 @@ class Message {
       };
 
   factory Message.fromJson(Map<String, dynamic> j) => Message(
-        id: j['id'] as String,
-        from: j['from'] as String,
+        id: (j['id'] ?? '') as String,
+        from: (j['from'] ?? '') as String,
         text: (j['text'] ?? '') as String,
-        at: j['at'] as String,
+        at: (j['at'] ?? '') as String,
         type: (j['type'] ?? 'text') as String,
         poll: j['poll'] != null ? MessagePoll.fromJson(j['poll'] as Map<String, dynamic>) : null,
         media: Attachment.fromJson(j['media'] as Map<String, dynamic>?),
@@ -1423,9 +1423,9 @@ class Complaint {
       };
 
   factory Complaint.fromJson(Map<String, dynamic> j) => Complaint(
-        id: j['id'] as String,
-        against: j['against'] as String,
-        from: j['from'] as String,
+        id: (j['id'] ?? '') as String,
+        against: (j['against'] ?? '') as String,
+        from: (j['from'] ?? '') as String,
         reason: (j['reason'] ?? '') as String,
         severity: ((j['severity'] ?? 1) as num).toInt(),
         date: (j['date'] ?? '') as String,
@@ -1484,8 +1484,8 @@ class Notice {
         'tenantAgreed': tenantAgreed,
       };
   factory Notice.fromJson(Map<String, dynamic> j) => Notice(
-        id: j['id'] as String,
-        userId: j['userId'] as String,
+        id: (j['id'] ?? '') as String,
+        userId: (j['userId'] ?? '') as String,
         givenAt: (j['givenAt'] ?? '') as String,
         leaveDate: (j['leaveDate'] ?? '') as String,
         reason: (j['reason'] ?? '') as String,
@@ -1503,7 +1503,7 @@ class TerminationExpense {
   TerminationExpense({required this.id, required this.reason, required this.amount});
   Map<String, dynamic> toJson() => {'id': id, 'reason': reason, 'amount': amount};
   factory TerminationExpense.fromJson(Map<String, dynamic> j) => TerminationExpense(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         reason: (j['reason'] ?? '') as String,
         amount: ((j['amount'] ?? 0) as num).toDouble(),
       );
@@ -1577,7 +1577,7 @@ class Issue {
       };
 
   factory Issue.fromJson(Map<String, dynamic> j) => Issue(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         title: (j['title'] ?? '') as String,
         category: (j['category'] ?? 'other') as String,
         description: (j['description'] ?? '') as String,
@@ -1624,7 +1624,7 @@ class RentPayment {
       };
 
   factory RentPayment.fromJson(Map<String, dynamic> j) => RentPayment(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         userId: (j['userId'] ?? '') as String,
         userName: (j['userName'] ?? '') as String,
         amount: ((j['amount'] ?? 0) as num).toDouble(),
@@ -1667,7 +1667,7 @@ class PersonalExpense {
       };
 
   factory PersonalExpense.fromJson(Map<String, dynamic> j) => PersonalExpense(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         userId: (j['userId'] ?? '') as String,
         category: (j['category'] ?? 'other') as String,
         title: (j['title'] ?? '') as String,
@@ -1736,10 +1736,10 @@ class CalendarNote {
       };
 
   static CalendarNote fromJson(Map<String, dynamic> j) => CalendarNote(
-        id: j['id'] as String,
-        userId: j['userId'] as String,
-        title: j['title'] as String,
-        date: j['date'] as String,
+        id: (j['id'] ?? '') as String,
+        userId: (j['userId'] ?? '') as String,
+        title: (j['title'] ?? '') as String,
+        date: (j['date'] ?? '') as String,
         note: j['note'] as String?,
       );
 }
@@ -1781,7 +1781,7 @@ class ShoppingItem {
       };
 
   factory ShoppingItem.fromJson(Map<String, dynamic> j) => ShoppingItem(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         text: (j['text'] ?? '') as String,
         addedBy: (j['addedBy'] ?? '') as String,
         addedByName: (j['addedByName'] ?? '') as String,
@@ -1823,7 +1823,7 @@ class AppNotification {
       };
 
   factory AppNotification.fromJson(Map<String, dynamic> j) => AppNotification(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         kind: (j['kind'] ?? 'payment_request') as String,
         title: (j['title'] ?? '') as String,
         body: (j['body'] ?? '') as String,
@@ -1934,7 +1934,7 @@ class ApplianceBooking {
       };
 
   factory ApplianceBooking.fromJson(Map<String, dynamic> j) => ApplianceBooking(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         appliance: (j['appliance'] ?? '') as String,
         userId: (j['userId'] ?? '') as String,
         userName: (j['userName'] ?? '') as String,
@@ -1969,7 +1969,7 @@ class ConditionItem {
       };
 
   factory ConditionItem.fromJson(Map<String, dynamic> j) => ConditionItem(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         area: (j['area'] ?? '') as String,
         condition: (j['condition'] ?? 'good') as String,
         notes: (j['notes'] ?? '') as String,
@@ -2010,7 +2010,7 @@ class ConditionCheck {
       };
 
   factory ConditionCheck.fromJson(Map<String, dynamic> j) => ConditionCheck(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         type: (j['type'] ?? 'move-in') as String,
         userId: (j['userId'] ?? '') as String,
         userName: (j['userName'] ?? '') as String,
@@ -2065,9 +2065,9 @@ class LeaseholderReview {
       };
 
   factory LeaseholderReview.fromJson(Map<String, dynamic> j) => LeaseholderReview(
-        id: j['id'] as String,
-        leaseholderId: j['leaseholderId'] as String,
-        fromUserId: j['fromUserId'] as String,
+        id: (j['id'] ?? '') as String,
+        leaseholderId: (j['leaseholderId'] ?? '') as String,
+        fromUserId: (j['fromUserId'] ?? '') as String,
         fromUserName: (j['fromUserName'] ?? '') as String,
         anonymous: (j['anonymous'] ?? false) as bool,
         rating: ((j['rating'] ?? 3) as num).toInt(),
@@ -2121,7 +2121,7 @@ class ListingReview {
       };
 
   factory ListingReview.fromJson(Map<String, dynamic> j) => ListingReview(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         listingId: (j['listingId'] ?? '') as String,
         targetUserId: (j['targetUserId'] ?? '') as String,
         targetUserName: (j['targetUserName'] ?? '') as String,
@@ -2194,7 +2194,7 @@ class Listing {
       };
 
   factory Listing.fromJson(Map<String, dynamic> j) => Listing(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         type: (j['type'] ?? 'tenant-wanted') as String,
         by: (j['by'] ?? '') as String,
         title: (j['title'] ?? '') as String,
@@ -2260,7 +2260,7 @@ class ListingInterest {
       };
 
   factory ListingInterest.fromJson(Map<String, dynamic> j) => ListingInterest(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         listingId: (j['listingId'] ?? '') as String,
         from: (j['from'] ?? '') as String,
         to: (j['to'] ?? '') as String,
@@ -2312,7 +2312,7 @@ class Inspection {
       };
 
   factory Inspection.fromJson(Map<String, dynamic> j) => Inspection(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         listingId: j['listingId'] as String?,
         requestedBy: (j['requestedBy'] ?? '') as String,
         to: (j['to'] ?? '') as String,
@@ -2440,7 +2440,7 @@ class PostMessage {
       };
 
   factory PostMessage.fromJson(Map<String, dynamic> j) => PostMessage(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         listingId: (j['listingId'] ?? '') as String,
         from: (j['from'] ?? '') as String,
         to: (j['to'] ?? '') as String,
@@ -2482,7 +2482,7 @@ class ParkingBooking {
       };
 
   factory ParkingBooking.fromJson(Map<String, dynamic> j) => ParkingBooking(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         spot: (j['spot'] ?? '') as String,
         userId: (j['userId'] ?? '') as String,
         userName: (j['userName'] ?? '') as String,
@@ -2542,7 +2542,7 @@ class EssentialListing {
       };
 
   factory EssentialListing.fromJson(Map<String, dynamic> j) => EssentialListing(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         postedBy: (j['postedBy'] as String?) ?? '',
         businessName: (j['businessName'] as String?) ?? '',
         category: (j['category'] as String?) ?? 'other',
@@ -2604,7 +2604,7 @@ class EssentialBooking {
       };
 
   factory EssentialBooking.fromJson(Map<String, dynamic> j) => EssentialBooking(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         listingId: (j['listingId'] ?? '') as String,
         requestedBy: (j['requestedBy'] ?? '') as String,
         businessOwnerId: (j['businessOwnerId'] ?? '') as String,
@@ -2668,7 +2668,7 @@ class GoodsListing {
       };
 
   factory GoodsListing.fromJson(Map<String, dynamic> j) => GoodsListing(
-        id: j['id'] as String,
+        id: (j['id'] ?? '') as String,
         postedBy: (j['postedBy'] ?? '') as String,
         title: (j['title'] ?? '') as String,
         description: (j['description'] ?? '') as String,
