@@ -49,19 +49,19 @@ test.beforeEach(async () => {
 });
 
 test('listingInterests: a third party cannot read an application, but applicant and owner can', async () => {
-  await seed('listingInterests', 'i1', { from: 'alice', to: 'bob', lifestyle: { x: 1 } });
+  await seed('listingInterests', 'i1', { from: 'alice', to: 'bob', participants: ['alice', 'bob'], lifestyle: { x: 1 } });
   await assertFails(getDoc(doc(db('carol'), 'listingInterests', 'i1')));
   await assertSucceeds(getDoc(doc(db('alice'), 'listingInterests', 'i1')));
   await assertSucceeds(getDoc(doc(db('bob'), 'listingInterests', 'i1')));
 });
 
-test('listingInterests: applicant must set from == their uid on create', async () => {
-  await assertFails(setDoc(doc(db('carol'), 'listingInterests', 'i2'), { from: 'alice', to: 'bob' }));
-  await assertSucceeds(setDoc(doc(db('alice'), 'listingInterests', 'i3'), { from: 'alice', to: 'bob' }));
+test('listingInterests: creator must be in participants; an outsider cannot create', async () => {
+  await assertFails(setDoc(doc(db('carol'), 'listingInterests', 'i2'), { from: 'alice', to: 'bob', participants: ['alice', 'bob'] }));
+  await assertSucceeds(setDoc(doc(db('alice'), 'listingInterests', 'i3'), { from: 'alice', to: 'bob', participants: ['alice', 'bob'] }));
 });
 
 test('postMessages: a non-participant cannot read a DM thread; participants can', async () => {
-  await seed('postMessages', 'm1', { from: 'alice', to: 'bob', text: 'private' });
+  await seed('postMessages', 'm1', { from: 'alice', to: 'bob', participants: ['alice', 'bob'], text: 'private' });
   await assertFails(getDoc(doc(db('carol'), 'postMessages', 'm1')));
   await assertSucceeds(getDoc(doc(db('alice'), 'postMessages', 'm1')));
   await assertSucceeds(getDoc(doc(db('bob'), 'postMessages', 'm1')));
@@ -90,10 +90,17 @@ test('goodsListings / essentials / listingReviews: only owner writes', async () 
 });
 
 test('essentialBookings: only the client and the business owner can see a booking', async () => {
-  await seed('essentialBookings', 'b1', { requestedBy: 'alice', businessOwnerId: 'bob' });
+  await seed('essentialBookings', 'b1', { requestedBy: 'alice', businessOwnerId: 'bob', participants: ['alice', 'bob'] });
   await assertFails(getDoc(doc(db('carol'), 'essentialBookings', 'b1')));
   await assertSucceeds(getDoc(doc(db('alice'), 'essentialBookings', 'b1')));
   await assertSucceeds(getDoc(doc(db('bob'), 'essentialBookings', 'b1')));
+});
+
+test('inspections: only the requester and the poster can see an inspection', async () => {
+  await seed('inspections', 'ins1', { requestedBy: 'alice', to: 'bob', participants: ['alice', 'bob'] });
+  await assertFails(getDoc(doc(db('carol'), 'inspections', 'ins1')));
+  await assertSucceeds(getDoc(doc(db('alice'), 'inspections', 'ins1')));
+  await assertSucceeds(getDoc(doc(db('bob'), 'inspections', 'ins1')));
 });
 
 test('appNotifications: only the recipient can read their notification', async () => {

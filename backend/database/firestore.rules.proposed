@@ -1,13 +1,27 @@
 rules_version = '2';
 
 // ─── PROPOSED per-record security model (Phase 1 of the security re-architecture)
-// NOT YET DEPLOYED. These rules replace the single world-readable/writable
+// NOT YET DEPLOYED. Replaces the single world-readable/writable
 // `community/global` document with per-record collections that enforce
-// ownership and participant scoping. They require the client to write those
-// collections with the denormalised owner/participant fields referenced below
-// (Listing.by, ListingInterest.from/to, PostMessage.from/to, EssentialListing/
-// GoodsListing.postedBy, ListingReview.fromUserId, EssentialBooking.requestedBy/
-// businessOwnerId, AppNotification.forUserId, and houseInvites/{houseId}_{uid}).
+// ownership and participant scoping.
+//
+// Client contract (Phase 2 must produce data in these shapes):
+//  - Public, read-by-all / write-by-owner:
+//      listings        owner field: `by`
+//      goodsListings   owner field: `postedBy`
+//      essentials      owner field: `postedBy`
+//      listingReviews  owner field: `fromUserId`
+//  - Private, scoped to a `participants` array of uids (client queries these
+//    with `where('participants', arrayContains: myUid)` so the listen is
+//    provably within the rules — "rules are not filters"):
+//      listingInterests   participants: [from, to]
+//      postMessages       participants: [from, to]
+//      inspections        participants: [requestedBy, to]
+//      essentialBookings  participants: [requestedBy, businessOwnerId]
+//  - appNotifications: recipient field `forUserId` (client queries
+//      `where('forUserId', isEqualTo: myUid)`).
+//  - houseInvites/{houseId}_{uid}: per-invitee join token.
+//
 // Do NOT `firebase deploy` these until the matching client version ships, or the
 // current single-doc client will break. Verified by backend/test/.
 service cloud.firestore {
@@ -19,11 +33,14 @@ service cloud.firestore {
       return isSignedIn() &&
         get(/databases/$(database)/documents/users/$(uid())).data.role == 'admin';
     }
+    function isParticipant() {
+      return isSignedIn() && uid() in resource.data.participants;
+    }
+    function willBeParticipant() {
+      return isSignedIn() && uid() in request.resource.data.participants;
+    }
 
     // ── Users ──────────────────────────────────────────────────────────────
-    // A user may read/write only their own profile, and may never self-change
-    // privileged fields (role, verification status, membership, house). Admins
-    // manage any user.
     match /users/{userId} {
       allow get: if isSignedIn() && (uid() == userId || isAdmin());
       allow list: if isAdmin();
@@ -41,9 +58,6 @@ service cloud.firestore {
     }
 
     // ── Houses ─────────────────────────────────────────────────────────────
-    // Members read/write the shared house doc. A non-member may add ONLY
-    // themselves to `members`, and only if a houseInvites doc names them — so a
-    // stranger can no longer self-join an arbitrary house.
     match /houses/{houseId} {
       allow read: if isSignedIn() && uid() in resource.data.members;
       allow create: if isSignedIn() && uid() in request.resource.data.members;
@@ -60,7 +74,6 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Per-invitee join tokens: created by a house member for a specific uid.
     match /houseInvites/{inviteKey} {
       allow get: if isSignedIn();
       allow list: if false;
@@ -70,7 +83,6 @@ service cloud.firestore {
         uid() in get(/databases/$(database)/documents/houses/$(resource.data.houseId)).data.members;
     }
 
-    // Legacy code-based invites: fetchable by exact code only (no enumeration).
     match /invites/{code} {
       allow get: if isSignedIn();
       allow list: if isAdmin();
@@ -80,8 +92,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // ── Public marketplace listings ────────────────────────────────────────
-    // Any signed-in user may read; only the owner may create/modify/delete.
+    // ── Public marketplace listings (read by all, written by owner) ─────────
     match /listings/{id} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.by == uid();
@@ -103,43 +114,32 @@ service cloud.firestore {
       allow update, delete: if isSignedIn() && resource.data.fromUserId == uid();
     }
 
-    // ── Applications (contain lifestyle answers + emergency contacts) ───────
-    // Visible only to the applicant (`from`) and the listing owner (`to`).
+    // ── Private, participant-scoped collections ────────────────────────────
+    // Applications (lifestyle answers + emergency contacts), DM threads,
+    // inspection requests and service bookings. Only the uids listed in
+    // `participants` can read or write; clients query with array-contains.
     match /listingInterests/{id} {
-      allow read: if isSignedIn() &&
-        (resource.data.from == uid() || resource.data.to == uid());
-      allow create: if isSignedIn() && request.resource.data.from == uid();
-      allow update: if isSignedIn() &&
-        (resource.data.from == uid() || resource.data.to == uid());
-      allow delete: if isSignedIn() && resource.data.from == uid();
+      allow read, update: if isParticipant();
+      allow create: if willBeParticipant();
+      allow delete: if isParticipant();
     }
-
-    // ── Private marketplace DM threads ─────────────────────────────────────
-    // Only the two participants may read or write.
     match /postMessages/{id} {
-      allow read: if isSignedIn() &&
-        (resource.data.from == uid() || resource.data.to == uid());
-      allow create: if isSignedIn() &&
-        (request.resource.data.from == uid() || request.resource.data.to == uid());
-      allow update: if isSignedIn() &&
-        (resource.data.from == uid() || resource.data.to == uid());
+      allow read, update: if isParticipant();
+      allow create: if willBeParticipant();
       allow delete: if false;
     }
-
-    // ── Service bookings ───────────────────────────────────────────────────
-    // Visible to the requesting client and the business owner only.
+    match /inspections/{id} {
+      allow read, update: if isParticipant();
+      allow create: if willBeParticipant();
+      allow delete: if isParticipant();
+    }
     match /essentialBookings/{id} {
-      allow read: if isSignedIn() &&
-        (resource.data.requestedBy == uid() || resource.data.businessOwnerId == uid());
-      allow create: if isSignedIn() && request.resource.data.requestedBy == uid();
-      allow update: if isSignedIn() &&
-        (resource.data.requestedBy == uid() || resource.data.businessOwnerId == uid());
+      allow read, update: if isParticipant();
+      allow create: if willBeParticipant();
       allow delete: if false;
     }
 
     // ── Notifications ──────────────────────────────────────────────────────
-    // Readable only by the recipient. (Any signed-in user may create one for
-    // another user — e.g. a payment request — but can never read others'.)
     match /appNotifications/{id} {
       allow read: if isSignedIn() && resource.data.forUserId == uid();
       allow create: if isSignedIn();
