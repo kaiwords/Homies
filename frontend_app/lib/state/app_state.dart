@@ -14,6 +14,7 @@ import '../util/admin_api.dart';
 import '../util/format.dart';
 import 'models.dart';
 import 'seed.dart';
+import 'sync_reconcile.dart';
 
 const _storageKey = 'homies-mobile-v2';
 
@@ -81,11 +82,25 @@ class HomiesState extends ChangeNotifier {
   // local/seed state up, or a freshly-joined / fresh-device user would clobber
   // the real house doc with local data before ever seeing it.
   bool _houseSnapshotApplied = false;
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _globalSub;
+  // ── Community sync (per-record top-level collections) ───────────────────
+  // The marketplace/essentials data used to live in one world-readable/
+  // writable community/global document. It's now split into per-record
+  // top-level collections, each with its own listener, so the Firestore rules
+  // can enforce ownership (public: owner-writes) and participant scoping
+  // (private DMs/applications/bookings). See `_globalSpecs()`.
+  final List<StreamSubscription<QuerySnapshot<Map<String, dynamic>>>> _globalSubs = [];
   bool _globalSyncing = false;
   bool _applyingRemoteGlobal = false;
-  // Same first-snapshot guard as _houseSnapshotApplied, but for community/global.
-  bool _globalSnapshotApplied = false;
+  // Per-collection first-snapshot guard: a collection isn't pushed (and its
+  // owned remote docs are never deleted) until we've received its first
+  // snapshot, so a fresh device never clobbers/deletes remote records it
+  // hasn't loaded yet.
+  final Map<String, bool> _globalReady = {};
+  // Per-collection baseline: docId -> canonical jsonEncode(model.toJson()) of
+  // what we believe Firestore currently holds. Rebuilt on each snapshot and
+  // updated after each push, so the reconciliation diff only writes/deletes
+  // what actually changed.
+  final Map<String, Map<String, String>> _globalBaselines = {};
 
   // Every real account, admin-only (authorized by the isAdmin() Firestore
   // rule) — session-only, not part of the persisted local-storage blob.
@@ -558,7 +573,7 @@ class HomiesState extends ChangeNotifier {
     final j = {..._sharedFieldsJson(), ..._localOnlyFieldsJson(), ..._globalFieldsJson()};
     await prefs.setString(_storageKey, jsonEncode(j));
     _pushHouseDocIfNeeded();
-    _pushGlobalDocIfNeeded();
+    _pushGlobalCollsIfNeeded();
   }
 
   // ── Firestore whole-house sync ──────────────────────────────────────────
@@ -628,79 +643,249 @@ class HomiesState extends ChangeNotifier {
     );
   }
 
-  // ── Firestore community/global sync (marketplace + essentials) ──────────
-  // Same whole-document pattern as the house sync above, but for one
-  // well-known doc shared by every signed-in user regardless of houseId —
-  // marketplace/essentials data isn't scoped to a single house.
-  void _pushGlobalDocIfNeeded() {
-    // Gate on _globalSyncing (not just _applyingRemoteGlobal), same as the
-    // house push gates on houseId — otherwise a demo account (or a real user
-    // before startGlobalSync() has run) would attempt to push local/seed
-    // data into the real shared marketplace doc on every mutate().
-    if (_applyingRemoteGlobal || !_globalSyncing) return;
-    // Same first-snapshot guard as the house push: don't overwrite the shared
-    // community doc with local/seed data before the real one has been applied.
-    if (!_globalSnapshotApplied) return;
-    FirebaseFirestore.instance.collection('community').doc('global').set({
-      ..._globalFieldsJson(),
-      'updatedAt': FieldValue.serverTimestamp(),
-      'updatedBy': session.userId,
-    }, SetOptions(merge: true)).catchError((Object e) {
-      if (kDebugMode) {
-        // ignore: avoid_print
-        print('Failed to push global doc: $e');
-      }
-    });
+  // ── Firestore community sync (per-record top-level collections) ─────────
+  // Replaces the old single community/global document. Each marketplace/
+  // essentials collection gets its own listener; the Firestore rules enforce
+  // ownership on the public ones and participant scoping on the private ones,
+  // so a listen has to be provably within the rules — hence the private
+  // collections are queried with `where('participants', arrayContains: uid)`
+  // (rules are NOT filters: an unconstrained listen would be denied).
+  //
+  // These client changes MUST be deployed together with
+  // backend/database/firestore.rules.proposed — the old single-doc client
+  // breaks under the new rules and the new client breaks under the old rules.
+
+  /// Describes one synced collection: how to query it (scoped to this user
+  /// where required), how to serialize the in-memory list, how to apply a
+  /// remote snapshot back into memory, and who is allowed to write/delete a
+  /// given doc.
+  List<_GlobalColl> _globalSpecs() {
+    final uid = session.userId ?? '';
+    final fs = FirebaseFirestore.instance;
+    bool ownsBy(String field, Map<String, dynamic> j) => (j[field] ?? '') == uid && uid.isNotEmpty;
+    bool participant(List<String> fields, Map<String, dynamic> j) =>
+        uid.isNotEmpty && fields.any((f) => (j[f] ?? '') == uid);
+
+    return [
+      // ── Public: read by all, write by owner ──
+      _GlobalColl(
+        name: 'listings',
+        query: () => fs.collection('listings'),
+        current: () => listings.map((l) => l.toJson()).toList(),
+        apply: (datas) => listings = _parseDocs(datas, Listing.fromJson, 'listings'),
+        canWrite: (j) => ownsBy('by', j),
+        canDelete: (j) => ownsBy('by', j),
+      ),
+      _GlobalColl(
+        name: 'goodsListings',
+        query: () => fs.collection('goodsListings'),
+        current: () => goodsListings.map((g) => g.toJson()).toList(),
+        apply: (datas) => goodsListings = _parseDocs(datas, GoodsListing.fromJson, 'goodsListings'),
+        canWrite: (j) => ownsBy('postedBy', j),
+        canDelete: (j) => ownsBy('postedBy', j),
+      ),
+      _GlobalColl(
+        name: 'essentials',
+        query: () => fs.collection('essentials'),
+        current: () => essentials.map((e) => e.toJson()).toList(),
+        apply: (datas) => essentials = _parseDocs(datas, EssentialListing.fromJson, 'essentials'),
+        canWrite: (j) => ownsBy('postedBy', j),
+        canDelete: (j) => ownsBy('postedBy', j),
+      ),
+      _GlobalColl(
+        name: 'listingReviews',
+        query: () => fs.collection('listingReviews'),
+        current: () => listingReviews.map((r) => r.toJson()).toList(),
+        apply: (datas) => listingReviews = _parseDocs(datas, ListingReview.fromJson, 'listingReviews'),
+        canWrite: (j) => ownsBy('fromUserId', j),
+        canDelete: (j) => ownsBy('fromUserId', j),
+      ),
+      // ── Private: participant-scoped (queried with array-contains) ──
+      _GlobalColl(
+        name: 'listingInterests',
+        query: () => fs.collection('listingInterests').where('participants', arrayContains: uid),
+        current: () => listingInterests.map((i) => i.toJson()).toList(),
+        apply: (datas) => listingInterests = _parseDocs(datas, ListingInterest.fromJson, 'listingInterests'),
+        canWrite: (j) => participant(['from', 'to'], j),
+        canDelete: (j) => participant(['from', 'to'], j),
+      ),
+      _GlobalColl(
+        name: 'postMessages',
+        query: () => fs.collection('postMessages').where('participants', arrayContains: uid),
+        current: () => postMessages.map((m) => m.toJson()).toList(),
+        apply: (datas) => postMessages = _parseDocs(datas, PostMessage.fromJson, 'postMessages'),
+        canWrite: (j) => participant(['from', 'to'], j),
+        canDelete: (j) => participant(['from', 'to'], j),
+        // Rules forbid deleting DMs (allow delete: if false) — never issue one.
+        allowDelete: false,
+      ),
+      _GlobalColl(
+        name: 'inspections',
+        query: () => fs.collection('inspections').where('participants', arrayContains: uid),
+        current: () => inspections.map((i) => i.toJson()).toList(),
+        apply: (datas) => inspections = _parseDocs(datas, Inspection.fromJson, 'inspections'),
+        canWrite: (j) => participant(['requestedBy', 'to'], j),
+        canDelete: (j) => participant(['requestedBy', 'to'], j),
+      ),
+      _GlobalColl(
+        name: 'essentialBookings',
+        query: () => fs.collection('essentialBookings').where('participants', arrayContains: uid),
+        current: () => essentialBookings.map((b) => b.toJson()).toList(),
+        apply: (datas) => essentialBookings = _parseDocs(datas, EssentialBooking.fromJson, 'essentialBookings'),
+        canWrite: (j) => participant(['requestedBy', 'businessOwnerId'], j),
+        canDelete: (j) => participant(['requestedBy', 'businessOwnerId'], j),
+        // Rules forbid deleting bookings (allow delete: if false).
+        allowDelete: false,
+      ),
+      // ── Notifications: recipient-scoped read; anyone may create (we create
+      // notifications addressed to OTHER users), but only the recipient deletes.
+      _GlobalColl(
+        name: 'appNotifications',
+        query: () => fs.collection('appNotifications').where('forUserId', isEqualTo: uid),
+        current: () => appNotifications.map((n) => n.toJson()).toList(),
+        apply: (datas) => appNotifications = _parseDocs(datas, AppNotification.fromJson, 'appNotifications'),
+        canWrite: (j) => uid.isNotEmpty, // create allowed for any signed-in user
+        canDelete: (j) => ownsBy('forUserId', j),
+      ),
+    ];
   }
 
-  /// Starts listening for remote changes to community/global. Safe to call
-  /// repeatedly. Unlike house sync, this has no id parameter — there's only
-  /// ever one global doc.
-  void startGlobalSync() {
-    if (_globalSyncing && _globalSub != null) return;
-    _globalSub?.cancel();
-    _globalSyncing = true;
-    _globalSnapshotApplied = false; // block pushes until the first snapshot lands
-    _globalSub = FirebaseFirestore.instance.collection('community').doc('global').snapshots().listen(
-      (snap) {
-        if (snap.metadata.hasPendingWrites) return;
-        final data = snap.data();
-        if (data == null) {
-          // Snapshot received, doc absent — first write may legitimately create it.
-          _globalSnapshotApplied = true;
-          return;
-        }
-        _applyingRemoteGlobal = true;
-        try {
-          _applyGlobalFieldsFromJson(data);
-          _globalSnapshotApplied = true;
-          notifyListeners();
-          _persist();
-          _maybeAutoJoinFromAcceptedInterest();
-        } catch (e) {
-          // A single malformed doc must not kill the sync — skip and survive.
-          if (kDebugMode) {
-            // ignore: avoid_print
-            print('Skipping malformed global snapshot: $e');
-          }
-        } finally {
-          _applyingRemoteGlobal = false;
-        }
-      },
-      onError: (Object e) {
+  /// Parses a batch of Firestore doc datas via [fromJson], skipping (and
+  /// logging) any single malformed doc so one bad record can't kill sync —
+  /// mirrors the house-sync resilience.
+  List<T> _parseDocs<T>(
+    List<Map<String, dynamic>> datas,
+    T Function(Map<String, dynamic>) fromJson,
+    String label,
+  ) {
+    final out = <T>[];
+    for (final d in datas) {
+      try {
+        out.add(fromJson(d));
+      } catch (e) {
         if (kDebugMode) {
           // ignore: avoid_print
-          print('Global sync error: $e');
+          print('Skipping malformed $label doc: $e');
         }
-      },
-    );
+      }
+    }
+    return out;
+  }
+
+  Map<String, String> _baselineFrom(List<Map<String, dynamic>> jsons) {
+    final m = <String, String>{};
+    for (final j in jsons) {
+      final id = (j['id'] ?? '') as String;
+      if (id.isEmpty) continue;
+      m[id] = jsonEncode(j);
+    }
+    return m;
+  }
+
+  /// Per-collection reconciliation, replacing the old single-doc push. For
+  /// each collection, diff the in-memory list against our baseline and write
+  /// the added/changed docs THIS USER MAY WRITE and delete the owned docs
+  /// removed locally. Never touches other users' records (received via the
+  /// listeners) — the rules would reject those writes anyway.
+  void _pushGlobalCollsIfNeeded() {
+    // Skip while applying a remote snapshot (this write would just echo it),
+    // and when community sync isn't active (demo/local session) — same intent
+    // as the old gate on _globalSyncing.
+    if (_applyingRemoteGlobal || !_globalSyncing) return;
+    final uid = session.userId;
+    if (uid == null || uid.isEmpty) return;
+    final fs = FirebaseFirestore.instance;
+    for (final c in _globalSpecs()) {
+      // Readiness gate: don't push (or delete) until this collection's first
+      // snapshot has landed, so we never delete remote docs before loading them.
+      if (_globalReady[c.name] != true) continue;
+      final baseline = _globalBaselines[c.name] ?? const <String, String>{};
+      final diff = reconcileCollection(
+        baseline: baseline,
+        current: c.current(),
+        canWrite: c.canWrite,
+        canDelete: c.canDelete,
+      );
+      if (diff.toWrite.isEmpty && diff.toDelete.isEmpty) continue;
+      final coll = fs.collection(c.name);
+      final next = Map<String, String>.from(baseline);
+      diff.toWrite.forEach((id, json) {
+        coll.doc(id).set(json).catchError((Object e) {
+          if (kDebugMode) {
+            // ignore: avoid_print
+            print('Failed to push ${c.name}/$id: $e');
+          }
+        });
+        next[id] = jsonEncode(json);
+      });
+      if (c.allowDelete) {
+        for (final id in diff.toDelete) {
+          coll.doc(id).delete().catchError((Object e) {
+            if (kDebugMode) {
+              // ignore: avoid_print
+              print('Failed to delete ${c.name}/$id: $e');
+            }
+          });
+          next.remove(id);
+        }
+      }
+      _globalBaselines[c.name] = next;
+    }
+  }
+
+  /// Starts one listener per community collection. Safe to call repeatedly —
+  /// a no-op if already syncing. Requires a signed-in uid (private queries are
+  /// scoped to it); demo/local sessions never call this.
+  void startGlobalSync() {
+    if (_globalSyncing && _globalSubs.isNotEmpty) return;
+    final uid = session.userId;
+    if (uid == null || uid.isEmpty) return;
+    stopGlobalSync(); // cancel any stragglers, reset flags/baselines
+    _globalSyncing = true;
+    for (final c in _globalSpecs()) {
+      final sub = c.query().snapshots().listen(
+        (snap) {
+          _applyingRemoteGlobal = true;
+          try {
+            final datas = snap.docs.map((d) => d.data()).toList();
+            c.apply(datas); // replace the in-memory list; remote is authoritative
+            // Rebuild the baseline from the freshly-applied list so it's in the
+            // exact same canonical form the reconciliation diff compares against.
+            _globalBaselines[c.name] = _baselineFrom(c.current());
+            _globalReady[c.name] = true;
+            notifyListeners();
+            _persist();
+            if (c.name == 'listingInterests') _maybeAutoJoinFromAcceptedInterest();
+          } catch (e) {
+            // A single bad snapshot must not kill sync — skip and survive.
+            if (kDebugMode) {
+              // ignore: avoid_print
+              print('Skipping malformed ${c.name} snapshot: $e');
+            }
+          } finally {
+            _applyingRemoteGlobal = false;
+          }
+        },
+        onError: (Object e) {
+          if (kDebugMode) {
+            // ignore: avoid_print
+            print('${c.name} sync error: $e');
+          }
+        },
+      );
+      _globalSubs.add(sub);
+    }
   }
 
   void stopGlobalSync() {
-    _globalSub?.cancel();
-    _globalSub = null;
+    for (final s in _globalSubs) {
+      s.cancel();
+    }
+    _globalSubs.clear();
     _globalSyncing = false;
-    _globalSnapshotApplied = false;
+    _applyingRemoteGlobal = false;
+    _globalReady.clear();
+    _globalBaselines.clear();
   }
 
   void stopHouseSync() {
@@ -1151,9 +1336,35 @@ class HomiesState extends ChangeNotifier {
   void dispose() {
     _authSub?.cancel();
     _houseSub?.cancel();
-    _globalSub?.cancel();
+    _adminUsersSub?.cancel();
+    for (final s in _globalSubs) {
+      s.cancel();
+    }
+    _globalSubs.clear();
     super.dispose();
   }
+}
+
+/// Configuration for one synced community collection — how to query, serialize,
+/// apply, and authorize writes/deletes. Built per-user by [HomiesState._globalSpecs].
+class _GlobalColl {
+  final String name;
+  final Query<Map<String, dynamic>> Function() query;
+  final List<Map<String, dynamic>> Function() current;
+  final void Function(List<Map<String, dynamic>> datas) apply;
+  final bool Function(Map<String, dynamic> json) canWrite;
+  final bool Function(Map<String, dynamic> json) canDelete;
+  final bool allowDelete;
+
+  _GlobalColl({
+    required this.name,
+    required this.query,
+    required this.current,
+    required this.apply,
+    required this.canWrite,
+    required this.canDelete,
+    this.allowDelete = true,
+  });
 }
 
 class HomiesScope extends InheritedNotifier<HomiesState> {

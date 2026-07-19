@@ -2257,6 +2257,10 @@ class ListingInterest {
         'status': status,
         'createdAt': createdAt,
         'inviteCode': inviteCode,
+        // Write-only derived index: lets the client query this private record
+        // with `where('participants', arrayContains: myUid)`. Ignored by
+        // fromJson — recomputed from `from`/`to` on every write.
+        'participants': [from, to].where((x) => x.isNotEmpty).toSet().toList(),
       };
 
   factory ListingInterest.fromJson(Map<String, dynamic> j) => ListingInterest(
@@ -2309,6 +2313,9 @@ class Inspection {
         'note': note,
         'status': status,
         'createdAt': createdAt,
+        // Write-only derived index for `where('participants', arrayContains:)`.
+        // Ignored by fromJson — recomputed from `requestedBy`/`to` on write.
+        'participants': [requestedBy, to].where((x) => x.isNotEmpty).toSet().toList(),
       };
 
   factory Inspection.fromJson(Map<String, dynamic> j) => Inspection(
@@ -2437,6 +2444,9 @@ class PostMessage {
         'kind': kind,
         'perf': perf?.toJson(),
         'attachment': attachment?.toJson(),
+        // Write-only derived index for `where('participants', arrayContains:)`.
+        // Ignored by fromJson — recomputed from `from`/`to` on write.
+        'participants': [from, to].where((x) => x.isNotEmpty).toSet().toList(),
       };
 
   factory PostMessage.fromJson(Map<String, dynamic> j) => PostMessage(
@@ -2601,6 +2611,9 @@ class EssentialBooking {
         'createdAt': createdAt,
         'updatedAt': updatedAt,
         'frequency': frequency,
+        // Write-only derived index for `where('participants', arrayContains:)`.
+        // Ignored by fromJson — recomputed from `requestedBy`/`businessOwnerId`.
+        'participants': [requestedBy, businessOwnerId].where((x) => x.isNotEmpty).toSet().toList(),
       };
 
   factory EssentialBooking.fromJson(Map<String, dynamic> j) => EssentialBooking(
