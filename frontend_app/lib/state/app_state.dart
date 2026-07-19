@@ -954,14 +954,34 @@ class HomiesState extends ChangeNotifier {
   Future<void> joinHouseByCode(String code) async {
     final cu = currentUser;
     if (cu == null) return;
-    final snap = await FirebaseFirestore.instance.collection('invites').doc(code).get();
-    final id = snap.data()?['houseId'] as String?;
+    // Membership is added server-side by the redeemInvite Cloud Function — the
+    // Firestore rules forbid a client from adding itself to houses/{id}.members,
+    // which is what stops any signed-in user from self-joining an arbitrary
+    // house. The function validates the code (exists, unused, email matches).
+    final token = await fb.FirebaseAuth.instance.currentUser?.getIdToken();
+    if (token == null) return;
+    String? id;
+    try {
+      final res = await http.post(
+        Uri.parse('$adminApiBaseUrl/invites/$code/redeem'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (res.statusCode != 200) {
+        if (kDebugMode) {
+          // ignore: avoid_print
+          print('joinHouseByCode failed: ${res.statusCode} ${res.body}');
+        }
+        return;
+      }
+      id = (jsonDecode(res.body) as Map<String, dynamic>)['houseId'] as String?;
+    } catch (e) {
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print('joinHouseByCode error: $e');
+      }
+      return;
+    }
     if (id == null) return;
-    await FirebaseFirestore.instance.collection('users').doc(cu.id).update({'houseId': id});
-    await FirebaseFirestore.instance.collection('houses').doc(id).update({
-      'members': FieldValue.arrayUnion([cu.id]),
-    });
-    await FirebaseFirestore.instance.collection('invites').doc(code).update({'status': 'accepted'});
     mutate(() {
       for (final i in invites) {
         if (i.code == code) i.status = 'accepted';

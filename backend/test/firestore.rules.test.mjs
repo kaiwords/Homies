@@ -112,8 +112,10 @@ test('appNotifications: only the recipient can read their notification', async (
 test('users: a user cannot self-elevate role or self-verify, but can edit profile fields', async () => {
   await assertFails(updateDoc(doc(db('alice'), 'users', 'alice'), { role: 'admin' }));
   await assertFails(updateDoc(doc(db('alice'), 'users', 'alice'), { leaseVerification: { status: 'verified' } }));
-  await assertFails(updateDoc(doc(db('alice'), 'users', 'alice'), { member: true }));
   await assertSucceeds(updateDoc(doc(db('alice'), 'users', 'alice'), { name: 'Alice B.' }));
+  // member/pending/houseId are client-side UI flags (house access is gated by
+  // houses.members), so self-writes to them are allowed.
+  await assertSucceeds(updateDoc(doc(db('alice'), 'users', 'alice'), { houseId: 'h1' }));
 });
 
 test('users: nobody can read another user profile (non-admin)', async () => {
@@ -121,20 +123,17 @@ test('users: nobody can read another user profile (non-admin)', async () => {
   await assertSucceeds(getDoc(doc(db('alice'), 'users', 'alice')));
 });
 
-test('houses: a stranger cannot self-join without an invite, but can with one', async () => {
+test('houses: a member can read/write; a non-member can do neither', async () => {
   await seed('houses', 'h1', { members: ['bob'], address: '1 St' });
-  // Carol is not a member and has no invite → cannot read or self-add.
+  // Bob is a member.
+  await assertSucceeds(getDoc(doc(db('bob'), 'houses', 'h1')));
+  await assertSucceeds(updateDoc(doc(db('bob'), 'houses', 'h1'), { address: '2 St' }));
+  // Carol is not — cannot read.
   await assertFails(getDoc(doc(db('carol'), 'houses', 'h1')));
-  await assertFails(updateDoc(doc(db('carol'), 'houses', 'h1'), { members: ['bob', 'carol'] }));
-
-  // A member issues a per-invitee token, then Carol may add only herself.
-  await seed('houseInvites', 'h1_carol', { houseId: 'h1', invitee: 'carol' });
-  await assertSucceeds(updateDoc(doc(db('carol'), 'houses', 'h1'), { members: ['bob', 'carol'] }));
 });
 
-test('houses: cannot add anyone other than yourself even with an invite', async () => {
+test('houses: a stranger can no longer self-join (membership is server-side only)', async () => {
   await seed('houses', 'h2', { members: ['bob'] });
-  await seed('houseInvites', 'h2_carol', { houseId: 'h2', invitee: 'carol' });
-  // Carol tries to add mallory too — must fail (only self allowed).
-  await assertFails(updateDoc(doc(db('carol'), 'houses', 'h2'), { members: ['bob', 'carol', 'mallory'] }));
+  // Even adding only herself is denied — the redeemInvite function does this.
+  await assertFails(updateDoc(doc(db('carol'), 'houses', 'h2'), { members: ['bob', 'carol'] }));
 });
