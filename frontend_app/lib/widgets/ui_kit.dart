@@ -1,10 +1,8 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 
 import '../state/models.dart';
 import '../theme.dart';
+import '../util/media.dart';
 import 'media_viewer.dart';
 
 // ─── HomiesCard ───────────────────────────────────────────────────────────────
@@ -459,40 +457,24 @@ class AttachmentTile extends StatelessWidget {
   final bool compact;
   const AttachmentTile({super.key, required this.value, this.compact = false});
 
-  Uint8List? _decode() {
-    final url = value.dataUrl;
-    if (url == null || !url.startsWith('data:')) return null;
-    final comma = url.indexOf(',');
-    if (comma < 0) return null;
-    try {
-      return base64Decode(url.substring(comma + 1));
-    } catch (_) {
-      return null;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final bytes = _decode();
-    final isImage = (value.type ?? '').startsWith('image/') && bytes != null;
+    final isImage = (value.type ?? '').startsWith('image/');
+    final provider = isImage ? attachmentImageProvider(value) : null;
     final sizeKb = value.size != null ? '${(value.size! / 1024).toStringAsFixed(0)} KB' : '';
     final size = compact ? 40.0 : 56.0;
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Row(children: [
-        if (isImage)
+        if (provider != null)
           GestureDetector(
             onTap: () => Navigator.of(context).push(MaterialPageRoute(
               fullscreenDialog: true,
-              builder: (_) => FullscreenImageViewer(
-                bytes: bytes,
-                fileName: value.fileName,
-                mimeType: value.type,
-              ),
+              builder: (_) => FullscreenImageViewer(attachment: value),
             )),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(10),
-              child: Image.memory(bytes, width: size, height: size, fit: BoxFit.cover),
+              child: Image(image: provider, width: size, height: size, fit: BoxFit.cover),
             ),
           )
         else

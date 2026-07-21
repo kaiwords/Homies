@@ -62,11 +62,11 @@ class GoodsListingDetailScreen extends StatelessWidget {
                   children: [
                     for (final p in listing.photos)
                       Builder(builder: (_) {
-                        final bytes = decodeAttachment(p);
+                        final provider = attachmentImageProvider(p);
                         return ClipRRect(
                           borderRadius: BorderRadius.circular(16),
-                          child: bytes != null
-                              ? Image.memory(bytes, fit: BoxFit.cover, width: double.infinity)
+                          child: provider != null
+                              ? Image(image: provider, fit: BoxFit.cover, width: double.infinity)
                               : Container(color: HomiesColors.surface2),
                         );
                       }),

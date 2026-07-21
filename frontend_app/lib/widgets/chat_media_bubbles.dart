@@ -20,25 +20,21 @@ class ChatImageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bytes = decodeAttachment(media);
-    if (bytes == null) {
+    final provider = attachmentImageProvider(media);
+    if (provider == null) {
       return Text('🖼️ photo', style: TextStyle(color: mine ? Colors.white : HomiesColors.text));
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
       GestureDetector(
         onTap: () => Navigator.of(context).push(MaterialPageRoute(
           fullscreenDialog: true,
-          builder: (_) => FullscreenImageViewer(
-            bytes: bytes,
-            fileName: media.fileName,
-            mimeType: media.type,
-          ),
+          builder: (_) => FullscreenImageViewer(attachment: media),
         )),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 240, maxWidth: 240),
-            child: Image.memory(bytes, fit: BoxFit.cover),
+            child: Image(image: provider, fit: BoxFit.cover),
           ),
         ),
       ),
@@ -336,10 +332,15 @@ class _ChatVoiceBubbleState extends State<ChatVoiceBubble> {
       await _player.pause();
       return;
     }
-    final bytes = decodeAttachment(widget.media);
-    if (bytes == null) return;
     if (!_loaded) {
-      await _player.setSourceBytes(bytes, mimeType: widget.media.type);
+      final url = widget.media.url;
+      if (url != null && url.isNotEmpty) {
+        await _player.setSource(UrlSource(url));
+      } else {
+        final bytes = decodeAttachment(widget.media);
+        if (bytes == null) return;
+        await _player.setSourceBytes(bytes, mimeType: widget.media.type);
+      }
       _loaded = true;
     }
     await _player.resume();

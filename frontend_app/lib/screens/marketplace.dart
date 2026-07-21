@@ -716,13 +716,13 @@ class _PhotoThumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bytes = decodeAttachment(attachment);
+    final provider = attachmentImageProvider(attachment);
     return Stack(
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(10),
-          child: bytes != null
-              ? Image.memory(bytes, width: 64, height: 64, fit: BoxFit.cover)
+          child: provider != null
+              ? Image(image: provider, width: 64, height: 64, fit: BoxFit.cover)
               : Container(
                   width: 64, height: 64,
                   color: HomiesColors.surface2,
@@ -807,7 +807,7 @@ class _GoodsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final photo = listing.photos.isEmpty ? null : listing.photos.first;
-    final bytes = photo == null ? null : decodeAttachment(photo);
+    final provider = photo == null ? null : attachmentImageProvider(photo);
     final sold = listing.status == 'sold';
 
     return HomiesCard(
@@ -818,8 +818,8 @@ class _GoodsCard extends StatelessWidget {
             aspectRatio: 1.15,
             child: ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              child: bytes != null
-                  ? Image.memory(bytes, fit: BoxFit.cover)
+              child: provider != null
+                  ? Image(image: provider, fit: BoxFit.cover)
                   : Container(
                       color: HomiesColors.surface2,
                       child: Icon(goodsCatIcon(listing.category), size: 32, color: HomiesColors.textFaint),

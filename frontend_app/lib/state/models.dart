@@ -3,18 +3,39 @@
 
 class Attachment {
   String? fileName;
+  // Legacy inline payload: a `data:<mime>;base64,...` URL. Kept for backward
+  // compatibility — pre-Phase-3 attachments (and demo/offline captures with no
+  // signed-in Firebase user) still store their bytes here.
   String? dataUrl;
+  // Phase 3: a Firebase Storage download URL. When set, the bytes live in
+  // Storage (not in the synced doc) and [dataUrl] is left null so synced
+  // Firestore docs stay tiny.
+  String? url;
+  // The Storage object path (`media/{uid}/{uuid}.{ext}`) backing [url], kept so
+  // the object can be deleted later.
+  String? storagePath;
   String? type;
   int? size;
   String? uploadedAt;
   // Duration in milliseconds, for audio/video attachments (voice notes, clips).
   int? durationMs;
 
-  Attachment({this.fileName, this.dataUrl, this.type, this.size, this.uploadedAt, this.durationMs});
+  Attachment({
+    this.fileName,
+    this.dataUrl,
+    this.url,
+    this.storagePath,
+    this.type,
+    this.size,
+    this.uploadedAt,
+    this.durationMs,
+  });
 
   Map<String, dynamic> toJson() => {
         'fileName': fileName,
         'dataUrl': dataUrl,
+        'url': url,
+        'storagePath': storagePath,
         'type': type,
         'size': size,
         'uploadedAt': uploadedAt,
@@ -26,6 +47,8 @@ class Attachment {
     return Attachment(
       fileName: j['fileName'] as String?,
       dataUrl: j['dataUrl'] as String?,
+      url: j['url'] as String?,
+      storagePath: j['storagePath'] as String?,
       type: j['type'] as String?,
       size: (j['size'] as num?)?.toInt(),
       uploadedAt: j['uploadedAt'] as String?,

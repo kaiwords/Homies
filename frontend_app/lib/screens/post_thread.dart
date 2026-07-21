@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +9,7 @@ import '../state/models.dart';
 import '../state/performance.dart';
 import '../theme.dart';
 import '../util/format.dart';
+import '../util/media.dart';
 import '../widgets/avatar.dart';
 import '../widgets/lifestyle_fields.dart';
 import '../widgets/media_viewer.dart';
@@ -1045,18 +1045,6 @@ class _ShareTenantRefModalState extends State<_ShareTenantRefModal> {
 
 // ─── Photo helpers ───────────────────────────────────────────────────────────
 
-Uint8List? _decodeBytes(Attachment a) {
-  final url = a.dataUrl;
-  if (url == null || !url.startsWith('data:')) return null;
-  final comma = url.indexOf(',');
-  if (comma < 0) return null;
-  try {
-    return base64Decode(url.substring(comma + 1));
-  } catch (_) {
-    return null;
-  }
-}
-
 /// Strip above the input bar showing the staged photo before it's sent.
 class _PendingPhotoPreview extends StatelessWidget {
   final Attachment attachment;
@@ -1068,17 +1056,17 @@ class _PendingPhotoPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bytes = _decodeBytes(attachment);
+    final provider = attachmentImageProvider(attachment);
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (bytes != null)
+          if (provider != null)
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: Image.memory(
-                bytes,
+              child: Image(
+                image: provider,
                 width: 60,
                 height: 60,
                 fit: BoxFit.cover,
@@ -1128,7 +1116,7 @@ class _PhotoMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bytes = _decodeBytes(attachment);
+    final provider = attachmentImageProvider(attachment);
     final bg = mine ? HomiesColors.accent : HomiesColors.surface2;
     final textColor = mine ? Colors.white : HomiesColors.text;
 
@@ -1150,22 +1138,18 @@ class _PhotoMessage extends StatelessWidget {
             ),
           ),
         GestureDetector(
-          onTap: bytes == null
+          onTap: provider == null
               ? null
               : () => Navigator.of(context).push(
                   MaterialPageRoute(
                     fullscreenDialog: true,
-                    builder: (_) => FullscreenImageViewer(
-                      bytes: bytes,
-                      fileName: attachment.fileName,
-                      mimeType: attachment.type,
-                    ),
+                    builder: (_) => FullscreenImageViewer(attachment: attachment),
                   ),
                 ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
-            child: bytes != null
-                ? Image.memory(bytes, width: 220, fit: BoxFit.fitWidth)
+            child: provider != null
+                ? Image(image: provider, width: 220, fit: BoxFit.fitWidth)
                 : Container(
                     width: 220,
                     height: 140,

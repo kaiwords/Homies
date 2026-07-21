@@ -1,0 +1,40 @@
+rules_version = '2';
+
+// ─── PROPOSED scoped Storage rules (pairs with the Phase 3 client media move)
+// NOT YET DEPLOYED. Replaces the permissive {allPaths=**} write rule with
+// per-user path scoping: media lives under media/{uid}/... and only that user
+// may upload/overwrite/delete it. Any authenticated user may read (download
+// URLs are shared inside chats and marketplace listings). Deploy together with
+// the client version that uploads to media/{uid}/{uuid}.{ext}.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Per-user media (chat photos/voice/video, bill proofs, listing images).
+    match /media/{userId}/{allPaths=**} {
+      // Reads: any authenticated user (preserves shared media viewing).
+      allow read: if request.auth != null;
+
+      // Writes: only the owner, and — for uploads/overwrites — within a size
+      // cap and a permitted content-type. On delete, request.resource is null.
+      allow write: if request.auth != null
+        && request.auth.uid == userId
+        && (
+          request.resource == null
+          || (
+            request.resource.size < 10 * 1024 * 1024
+            && (
+              request.resource.contentType.matches('image/.*') ||
+              request.resource.contentType.matches('video/.*') ||
+              request.resource.contentType.matches('audio/.*') ||
+              request.resource.contentType == 'application/pdf'
+            )
+          )
+        );
+    }
+
+    // Deny everything outside the scoped media path.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

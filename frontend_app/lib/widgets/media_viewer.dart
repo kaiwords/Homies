@@ -1,39 +1,31 @@
-import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-/// Strips any directory components from [name], keeping just the basename,
-/// so a fileName carrying '../' or an absolute path can't write outside the
-/// intended directory.
-String _safeFileName(String name) {
-  final base = name.split(RegExp(r'[\\/]')).last.trim();
-  return base.isEmpty ? 'file' : base;
-}
+import '../state/models.dart';
+import '../util/media.dart';
 
 /// Full-screen image viewer with pinch-zoom, explicit back button and download.
-/// Use with [Navigator.push] + [fullscreenDialog: true].
+/// Use with [Navigator.push] + [fullscreenDialog: true]. Works for both
+/// Storage-backed ([Attachment.url]) and legacy base64 ([Attachment.dataUrl])
+/// attachments — display goes through [attachmentImageProvider] and saving
+/// through [attachmentToTempFile] (which downloads the url when needed).
 class FullscreenImageViewer extends StatelessWidget {
-  final Uint8List bytes;
-  final String? fileName;
-  final String? mimeType;
+  final Attachment attachment;
 
-  const FullscreenImageViewer({
-    super.key,
-    required this.bytes,
-    this.fileName,
-    this.mimeType,
-  });
+  const FullscreenImageViewer({super.key, required this.attachment});
+
+  String get _ext {
+    final name = attachment.fileName ?? '';
+    final dot = name.lastIndexOf('.');
+    if (dot >= 0 && dot < name.length - 1) return name.substring(dot + 1).toLowerCase();
+    return (attachment.type ?? '').contains('png') ? 'png' : 'jpg';
+  }
 
   Future<void> _save(BuildContext context) async {
     try {
-      final dir = await getTemporaryDirectory();
-      final name = _safeFileName(fileName ?? 'photo-${DateTime.now().millisecondsSinceEpoch}.jpg');
-      final file = File('${dir.path}/$name');
-      await file.writeAsBytes(bytes);
-      await Share.shareXFiles([XFile(file.path, mimeType: mimeType ?? 'image/jpeg')]);
+      final file = await attachmentToTempFile(attachment, ext: _ext);
+      if (file == null) throw Exception('no bytes');
+      await Share.shareXFiles([XFile(file.path, mimeType: attachment.type ?? 'image/jpeg')]);
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -45,6 +37,7 @@ class FullscreenImageViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final provider = attachmentImageProvider(attachment);
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -56,19 +49,22 @@ class FullscreenImageViewer extends StatelessWidget {
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.download_rounded),
-            tooltip: 'Save photo',
-            onPressed: () => _save(context),
-          ),
+          if (provider != null)
+            IconButton(
+              icon: const Icon(Icons.download_rounded),
+              tooltip: 'Save photo',
+              onPressed: () => _save(context),
+            ),
         ],
       ),
       body: Center(
-        child: InteractiveViewer(
-          minScale: 0.5,
-          maxScale: 6,
-          child: Image.memory(bytes),
-        ),
+        child: provider == null
+            ? const Text('Could not load this photo.', style: TextStyle(color: Colors.white70))
+            : InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 6,
+                child: Image(image: provider),
+              ),
       ),
     );
   }
