@@ -614,7 +614,7 @@ class _ApprovalCard extends StatelessWidget {
         _ApprovalRow(
           title: 'ID document',
           sub: subs?.idDoc != null ? (subs!.idDoc!.kind ?? '').replaceAll('-', ' ') : 'No submission',
-          hasAttachment: subs?.idDoc?.dataUrl != null,
+          hasAttachment: subs?.idDoc?.dataUrl != null || subs?.idDoc?.url != null,
           approved: user.docVerified,
           onApprove: () => approve('docVerified'),
           onReject: () => reject('docVerified'),
@@ -622,7 +622,7 @@ class _ApprovalCard extends StatelessWidget {
         _ApprovalRow(
           title: 'Bond — ${fmtAUD(user.bondAmount)}',
           sub: subs?.bondProof != null ? 'paid via ${subs!.bondProof!.method}' : 'No submission',
-          hasAttachment: subs?.bondProof?.dataUrl != null,
+          hasAttachment: subs?.bondProof?.dataUrl != null || subs?.bondProof?.url != null,
           approved: user.bondPaid,
           onApprove: () => approve('bondPaid'),
           onReject: () => reject('bondPaid'),
@@ -630,7 +630,7 @@ class _ApprovalCard extends StatelessWidget {
         _ApprovalRow(
           title: 'Advance rent',
           sub: subs?.advanceRentProof != null ? 'paid via ${subs!.advanceRentProof!.method}' : 'No submission',
-          hasAttachment: subs?.advanceRentProof?.dataUrl != null,
+          hasAttachment: subs?.advanceRentProof?.dataUrl != null || subs?.advanceRentProof?.url != null,
           approved: user.advanceRentPaid,
           onApprove: () => approve('advanceRentPaid'),
           onReject: () => reject('advanceRentPaid'),

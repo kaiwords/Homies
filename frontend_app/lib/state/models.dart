@@ -60,17 +60,21 @@ class Attachment {
 class IdDocSubmission {
   String? kind;
   String? fileName;
-  String? dataUrl;
+  String? dataUrl; // legacy inline base64 (backward compat)
+  String? url; // Firebase Storage download URL (preferred)
+  String? storagePath;
   String? type;
   int? size;
   String? uploadedAt;
 
-  IdDocSubmission({this.kind, this.fileName, this.dataUrl, this.type, this.size, this.uploadedAt});
+  IdDocSubmission({this.kind, this.fileName, this.dataUrl, this.url, this.storagePath, this.type, this.size, this.uploadedAt});
 
   Map<String, dynamic> toJson() => {
         'kind': kind,
         'fileName': fileName,
         'dataUrl': dataUrl,
+        'url': url,
+        'storagePath': storagePath,
         'type': type,
         'size': size,
         'uploadedAt': uploadedAt,
@@ -82,6 +86,8 @@ class IdDocSubmission {
       kind: j['kind'] as String?,
       fileName: j['fileName'] as String?,
       dataUrl: j['dataUrl'] as String?,
+      url: j['url'] as String?,
+      storagePath: j['storagePath'] as String?,
       type: j['type'] as String?,
       size: (j['size'] as num?)?.toInt(),
       uploadedAt: j['uploadedAt'] as String?,
@@ -92,17 +98,21 @@ class IdDocSubmission {
 class PaymentSubmission {
   String? method;
   String? fileName;
-  String? dataUrl;
+  String? dataUrl; // legacy inline base64 (backward compat)
+  String? url; // Firebase Storage download URL (preferred)
+  String? storagePath;
   String? type;
   int? size;
   String? uploadedAt;
 
-  PaymentSubmission({this.method, this.fileName, this.dataUrl, this.type, this.size, this.uploadedAt});
+  PaymentSubmission({this.method, this.fileName, this.dataUrl, this.url, this.storagePath, this.type, this.size, this.uploadedAt});
 
   Map<String, dynamic> toJson() => {
         'method': method,
         'fileName': fileName,
         'dataUrl': dataUrl,
+        'url': url,
+        'storagePath': storagePath,
         'type': type,
         'size': size,
         'uploadedAt': uploadedAt,
@@ -114,6 +124,8 @@ class PaymentSubmission {
       method: j['method'] as String?,
       fileName: j['fileName'] as String?,
       dataUrl: j['dataUrl'] as String?,
+      url: j['url'] as String?,
+      storagePath: j['storagePath'] as String?,
       type: j['type'] as String?,
       size: (j['size'] as num?)?.toInt(),
       uploadedAt: j['uploadedAt'] as String?,

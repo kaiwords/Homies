@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:math';
 
 import 'package:file_picker/file_picker.dart';
@@ -160,15 +159,9 @@ class _PostThreadScreenState extends State<PostThreadScreen> {
       'webp' => 'image/webp',
       _ => 'image/jpeg',
     };
-    setState(() {
-      _pendingPhoto = Attachment(
-        fileName: f.name,
-        dataUrl: 'data:$type;base64,${base64Encode(f.bytes!)}',
-        type: type,
-        size: f.size,
-        uploadedAt: DateTime.now().toIso8601String(),
-      );
-    });
+    final attachment = await uploadPickedBytes(bytes: f.bytes!, fileName: f.name, mime: type);
+    if (!mounted) return;
+    setState(() => _pendingPhoto = attachment);
   }
 
   @override

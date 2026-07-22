@@ -1,10 +1,9 @@
-import 'dart:convert';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../state/models.dart';
 import '../theme.dart';
+import '../util/media.dart';
 import 'ui_kit.dart';
 
 class FilePickerButton extends StatefulWidget {
@@ -53,29 +52,24 @@ class _FilePickerButtonState extends State<FilePickerButton> {
         return;
       }
       final bytes = f.bytes;
-      String? dataUrl;
-      String? type;
-      if (bytes != null) {
-        final ext = (f.extension ?? '').toLowerCase();
-        type = switch (ext) {
-          'jpg' || 'jpeg' => 'image/jpeg',
-          'png' => 'image/png',
-          'gif' => 'image/gif',
-          'webp' => 'image/webp',
-          'pdf' => 'application/pdf',
-          _ => 'application/octet-stream',
-        };
-        dataUrl = 'data:$type;base64,${base64Encode(bytes)}';
+      if (bytes == null) {
+        setState(() => _busy = false);
+        return;
       }
-      widget.onChanged(
-        Attachment(
-          fileName: f.name,
-          dataUrl: dataUrl,
-          type: type,
-          size: f.size,
-          uploadedAt: DateTime.now().toIso8601String(),
-        ),
-      );
+      final ext = (f.extension ?? '').toLowerCase();
+      final type = switch (ext) {
+        'jpg' || 'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'gif' => 'image/gif',
+        'webp' => 'image/webp',
+        'pdf' => 'application/pdf',
+        _ => 'application/octet-stream',
+      };
+      // Uploads to Firebase Storage (URL only in the synced doc) with a base64
+      // fallback for demo/offline — see uploadPickedBytes.
+      final attachment = await uploadPickedBytes(bytes: bytes, fileName: f.name, mime: type);
+      if (!mounted) return;
+      widget.onChanged(attachment);
       setState(() => _busy = false);
     } catch (e) {
       setState(() {

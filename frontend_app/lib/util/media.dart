@@ -179,6 +179,30 @@ Future<MediaResult> voiceFileToAttachment(String path, int durationMs) async {
   }
 }
 
+/// Turn already-read bytes (e.g. from file_picker) into an [Attachment],
+/// uploading to Firebase Storage when signed in (so the synced doc carries only
+/// a URL) and falling back to an inline base64 data URL for demo/offline. Used
+/// for document/file attachments (chat files, ID docs, payment proofs).
+Future<Attachment> uploadPickedBytes({
+  required List<int> bytes,
+  required String fileName,
+  required String mime,
+}) async {
+  final ext = _extOf(fileName).isEmpty
+      ? (mime.contains('/') ? mime.split('/').last : 'bin')
+      : _extOf(fileName);
+  final uploaded = await _uploadToStorage(bytes, mime: mime, ext: ext);
+  return Attachment(
+    fileName: fileName,
+    url: uploaded?.url,
+    storagePath: uploaded?.storagePath,
+    dataUrl: uploaded == null ? _dataUrl(mime, bytes) : null,
+    type: mime,
+    size: bytes.length,
+    uploadedAt: DateTime.now().toIso8601String(),
+  );
+}
+
 /// Decode an attachment's legacy base64 data URL back into bytes (for
 /// display/playback of pre-Phase-3 / demo attachments). Returns null for
 /// Storage-backed attachments, which carry their bytes at [Attachment.url].
